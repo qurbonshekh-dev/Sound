@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlowSound Pro — Single‑File</title>
+  <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+  <style>
+    :root{
+      --bg-from:#f8fafc; /* slate-50 */
+      --bg-to:#f5f5f4;   /* stone-100 */
+      --text:#0a0a0a;
+      --muted:#6b7280;
+      --card:#ffffffbb;
+      --border:#0000001a;
+      --black:#000;
+    }
+    *{box-sizing:border-box} body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Apple Color Emoji","Segoe UI Emoji";color:var(--text);background:linear-gradient(135deg,var(--bg-from),var(--bg-to)) fixed;}
+    .container{max-width:1100px;margin:0 auto;padding:16px}
+    header{position:sticky;top:0;backdrop-filter:saturate(1.2) blur(8px);background:#ffffff88;border-bottom:1px solid var(--border);z-index:10}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0}
+    .logo{display:flex;align-items:center;gap:10px}
+    .dot{width:28px;height:28px;border-radius:12px;background:#000}
+    .btn{border:none;border-radius:999px;padding:10px 16px;background:#000;color:#fff;cursor:pointer;font-weight:600}
+    .btn-outline{background:#fff;color:#000;border:1px solid #00000033}
+    .grid{display:grid;gap:16px}
+    @media(min-width:920px){.grid-3{grid-template-columns:2fr 1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px}
+    h1{margin:0;font-size:40px;letter-spacing:-0.02em}
+    h2{margin:0 0 8px 0;font-size:22px}
+    p.muted{color:var(--muted)}
+    .chips{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+    .chip{border:1px solid #00000033;border-radius:999px;padding:8px 14px;background:#fff;cursor:pointer;font-size:14px}
+    .chip.active{background:#000;color:#fff;border-color:#000}
+    .field{margin-top:12px}
+    .label{font-size:14px;font-weight:600}
+    .range{width:100%}
+    .mini{font-size:12px;color:#6b7280}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .knobs{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .visual{width:100%;height:70px;border-radius:10px;border:1px solid var(--border);background:#ffffffb3}
+    footer{margin-top:auto;border-top:1px solid var(--border);background:#ffffff88}
+    .row-sm{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;font-size:12px;color:#6b7280}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container row">
+      <div class="logo"><div class="dot"></div><b>FlowSound Pro</b></div>
+      <div><button id="playBtn" class="btn">Play</button></div>
+    </div>
+  </header>
+
+  <main class="container grid grid-3" style="padding-top:20px;padding-bottom:24px">
+    <section class="card">
+      <h1>Adaptive soundscapes, now richer</h1>
+      <p class="muted">Higher fidelity chain, chord progressions, ambience layers, and a live mixer. Built with Web Audio (Tone.js), runs fully on‑device.</p>
+      <canvas id="viz" class="visual" width="900" height="70"></canvas>
+
+      <div class="chips" id="modeChips"></div>
+      <div class="mini" id="modeDesc"></div>
+
+      <div class="two" style="margin-top:16px">
+        <div class="card" style="padding:16px">
+          <div class="label">Intensity</div>
+          <input id="intensity" class="range" type="range" min="0" max="100" value="40" />
+          <div class="mini"><span id="intensityVal">40</span>%</div>
+          <div class="field">
+            <label class="label">Session</label>
+            <select id="minutes" style="width:100%;margin-top:6px;border:1px solid #00000033;border-radius:12px;padding:8px;background:#fff">
+              <option value="0">No timer</option>
+              <option value="10">10 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="45">45 minutes</option>
+              <option value="60">60 minutes</option>
+            </select>
+            <div class="mini" id="remain" style="margin-top:6px;display:none"></div>
+          </div>
+        </div>
+        <div class="card" style="padding:16px">
+          <div class="label">Brand theme</div>
+          <div class="chips" id="brandChips" style="margin-top:8px"></div>
+          <div class="chips" style="margin-top:8px">
+            <button id="savePreset" class="btn btn-outline">Save preset</button>
+            <label class="btn btn-outline" style="cursor:pointer">Load preset<input id="loadPreset" type="file" accept="application/json" style="display:none"/></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="card">
+      <div style="font-weight:600;font-size:18px">Mixer</div>
+      <div class="knobs" style="margin-top:12px">
+        <div>
+          <div class="label">Pad</div>
+          <input id="gainPad" class="range" type="range" min="0" max="1" step="0.01" value="0.7" />
+          <div class="mini" id="gainPadVal">70%</div>
+        </div>
+        <div>
+          <div class="label">Arp</div>
+          <input id="gainArp" class="range" type="range" min="0" max="1" step="0.01" value="0.45" />
+          <div class="mini" id="gainArpVal">45%</div>
+        </div>
+        <div>
+          <div class="label">Bass</div>
+          <input id="gainBass" class="range" type="range" min="0" max="1" step="0.01" value="0.4" />
+          <div class="mini" id="gainBassVal">40%</div>
+        </div>
+        <div>
+          <div class="label">Perc</div>
+          <input id="gainPerc" class="range" type="range" min="0" max="1" step="0.01" value="0.25" />
+          <div class="mini" id="gainPercVal">25%</div>
+        </div>
+      </div>
+      <div class="label" style="margin-top:14px">Ambience</div>
+      <div class="three" style="margin-top:8px">
+        <div>
+          <div class="mini">Rain</div>
+          <input id="ambRain" class="range" type="range" min="0" max="1" step="0.01" value="0.15" />
+        </div>
+        <div>
+          <div class="mini">Ocean</div>
+          <input id="ambOcean" class="range" type="range" min="0" max="1" step="0.01" value="0.1" />
+        </div>
+        <div>
+          <div class="mini">Fire</div>
+          <input id="ambFire" class="range" type="range" min="0" max="1" step="0.01" value="0.0" />
+        </div>
+      </div>
+      <div class="mini" style="margin-top:8px">Tip: if sound feels harsh, slightly lower Intensity and Arp/Perc.</div>
+    </aside>
+  </main>
+
+  <footer>
+    <div class="container row-sm">
+      <div>© <span id="year"></span> FlowSound Pro</div>
+      <div style="display:flex;gap:12px"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Support</a></div>
+    </div>
+  </footer>
+
+<script>
+  const BRANDS = {
+    neutral: { from: '#f8fafc', to: '#f5f5f4' },
+    aqua:    { from: '#f0f9ff', to: '#d1fae5' },
+    sunset:  { from: '#fff1f2', to: '#fde68a' },
+    violet:  { from: '#f5f3ff', to: '#fae8ff' },
+  };
+
+  const MODES = {
+    relax: { label:'Relax', desc:'Warm pads, gentle delays, slow movement.', bpm:70, key:'C', oct:3, prog:[[0,9,5,7],[0,7,9,5]], scale:[0,2,5,7,9,12,14], amb:{rain:0.3,ocean:0.15,fire:0.0}, bg:'aqua' },
+    focus: { label:'Focus', desc:'Airy pads, steady ticks, minimal harmony.', bpm:86, key:'D', oct:3, prog:[[0,10,5,7],[0,7,10,5]], scale:[0,3,5,7,10,12,15], amb:{rain:0.15,ocean:0.1,fire:0.0}, bg:'neutral' },
+    sleep: { label:'Sleep', desc:'Deep drones, ultra‑soft highs, very slow.', bpm:52, key:'A', oct:2, prog:[[0,10,3,7]], scale:[0,2,3,7,10,12], amb:{rain:0.2,ocean:0.25,fire:0.12}, bg:'violet' },
+    activity:{ label:'Activity', desc:'Bright arps, light perc, energetic but smooth.', bpm:108, key:'E', oct:3, prog:[[0,9,7,5],[0,5,7,9]], scale:[0,2,4,7,9,12,14], amb:{rain:0.05,ocean:0.0,fire:0.0}, bg:'sunset' },
+  };
+
+  const PITCHES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const clamp = (n,a,b)=>Math.min(b,Math.max(a,n));
+  const toNote = (key,oct,semi)=>{
+    const idx = (PITCHES.indexOf(key)+semi+1200)%12;
+    const midi = 12*(oct+1)+idx;
+    return Tone.Frequency(midi,'midi').toNote();
+  }
+
+  // ==== State ====
+  let state = {
+    mode:'focus',
+    playing:false,
+    intensity:40,
+    brand:'neutral',
+    gains:{ pad:0.7, arp:0.45, bass:0.4, perc:0.25 },
+    amb:{ rain:0.15, ocean:0.1, fire:0.0 },
+    minutes:0,
+    remainSec:0,
+  };
+
+  let nodes = {}; let started=false; let raf;
+
+  // ==== UI Bindings ====
+  const playBtn = document.getElementById('playBtn');
+  const modeChips = document.getElementById('modeChips');
+  const modeDesc = document.getElementById('modeDesc');
+  const intensity = document.getElementById('intensity');
+  const intensityVal = document.getElementById('intensityVal');
+  const minutesSel = document.getElementById('minutes');
+  const remain = document.getElementById('remain');
+  const brandChips = document.getElementById('brandChips');
+  const yearEl = document.getElementById('year');
+  yearEl.textContent = new Date().getFullYear();
+
+  const gainPad = document.getElementById('gainPad');
+  const gainArp = document.getElementById('gainArp');
+  const gainBass = document.getElementById('gainBass');
+  const gainPerc = document.getElementById('gainPerc');
+  const gainPadVal = document.getElementById('gainPadVal');
+  const gainArpVal = document.getElementById('gainArpVal');
+  const gainBassVal = document.getElementById('gainBassVal');
+  const gainPercVal = document.getElementById('gainPercVal');
+
+  const ambRain = document.getElementById('ambRain');
+  const ambOcean = document.getElementById('ambOcean');
+  const ambFire = document.getElementById('ambFire');
+
+  const savePresetBtn = document.getElementById('savePreset');
+  const loadPresetInput = document.getElementById('loadPreset');
+
+  const viz = document.getElementById('viz'); const vctx = viz.getContext('2d');
+
+  function updateBrand(){
+    const b = BRANDS[state.brand]||BRANDS.neutral;
+    document.documentElement.style.setProperty('--bg-from', b.from);
+    document.documentElement.style.setProperty('--bg-to', b.to);
+  }
+
+  function drawViz(){
+    vctx.clearRect(0,0,viz.width,viz.height);
+    const a = nodes.analyser; if(!a){ raf=requestAnimationFrame(drawViz); return; }
+    const vals = a.getValue();
+    const w = viz.width, h = viz.height, bars=vals.length, bw = w/bars;
+    for(let i=0;i<bars;i++){
+      const v = (vals[i]+140)/140; const bh = Math.max(1, v*h);
+      vctx.fillStyle='rgba(0,0,0,0.6)';
+      vctx.fillRect(i*bw, h-bh, bw*0.8, bh);
+    }
+    raf=requestAnimationFrame(drawViz);
+  }
+
+  // ==== Audio Engine ====
+  async function buildEngine(){
+    await Tone.start();
+    const cfg = MODES[state.mode];
+    Tone.Transport.bpm.value = cfg.bpm;
+
+    // Master chain
+    const preGain = new Tone.Gain(0.9);
+    const eq = new Tone.EQ3({ low:0, mid:-2.5, high:-1.5 });
+    const widener = new Tone.StereoWidener(0.35);
+    const multiband = new Tone.MultibandCompressor({ lowFrequency:200, highFrequency:3500, low:{threshold:-24,ratio:3}, mid:{threshold:-26,ratio:2.5}, high:{threshold:-28,ratio:2.2} });
+    const limiter = new Tone.Limiter(-1);
+    const master = new Tone.Gain(0.9).toDestination();
+    preGain.connect(eq).connect(widener).connect(multiband).connect(limiter).connect(master);
+
+    const analyser = new Tone.Analyser('fft',64); limiter.connect(analyser);
+
+    // FX
+    const bigRev = new Tone.Reverb({ decay:7, wet:0.35 });
+    const smallRev = new Tone.Reverb({ decay:3, wet:0.2 });
+    const delay = new Tone.FeedbackDelay({ delayTime:0.22, feedback:0.35, wet:0.2 });
+    const chorus = new Tone.Chorus(0.8, 1.5, 0.25).start();
+
+    // Pad layers
+    const padFilter = new Tone.Filter({ type:'lowpass', frequency:1600 + state.intensity*10, Q:0.7 });
+    const padLayer1 = new Tone.PolySynth(Tone.AMSynth,{ harmonicity:2, modulationIndex:1.5, oscillator:{type:'sine'}, envelope:{attack:1.8,decay:1.4,sustain:0.7,release:5}, modulation:{type:'triangle'}, modulationEnvelope:{attack:2,decay:1,sustain:0.6,release:4} });
+    const padLayer2 = new Tone.PolySynth(Tone.Synth,{ oscillator:{type:'sawtooth'}, envelope:{attack:2.2,decay:1.8,sustain:0.65,release:6} });
+    const padBus = new Tone.Gain(state.gains.pad).connect(preGain);
+    padLayer1.connect(chorus).connect(bigRev).connect(padFilter).connect(padBus);
+    padLayer2.connect(smallRev).connect(padFilter).connect(padBus);
+
+    // Arp
+    const arpSynth = new Tone.Synth({ oscillator:{type:'triangle8'}, envelope:{attack:0.01,decay:0.25,sustain:0.1,release:0.4} });
+    const arpFilter = new Tone.AutoFilter({ frequency:0.08, baseFrequency:1200, octaves:1, type:'sine' }).start();
+    const arpBus = new Tone.Gain(state.gains.arp).connect(preGain);
+    arpSynth.connect(delay).connect(arpFilter).connect(arpBus);
+
+    // Bass
+    const bass = new Tone.MonoSynth({ oscillator:{type:'triangle'}, filter:{Q:1,type:'lowpass',rolloff:-24}, filterEnvelope:{attack:0.03,decay:0.2,sustain:0.2,release:0.4,baseFrequency:60,octaves:3}, envelope:{attack:0.01,decay:0.2,sustain:0.3,release:0.5} });
+    const bassBus = new Tone.Gain(state.gains.bass).connect(preGain);
+    bass.connect(bassBus);
+
+    // Perc
+    const tick = new Tone.MembraneSynth({ octaves:2, pitchDecay:0.008, envelope:{attack:0.001,decay:0.08,sustain:0} });
+    const noise = new Tone.Noise('pink');
+    const noiseEnv = new Tone.AmplitudeEnvelope({ attack:0.001,decay:0.12,sustain:0,release:0.03 });
+    const noiseHP = new Tone.Filter({ type:'highpass', frequency:4000 });
+    const percBus = new Tone.Gain(state.gains.perc).connect(preGain);
+    tick.connect(percBus); noise.connect(noiseHP).connect(noiseEnv).connect(percBus);
+
+    // Ambience
+    const makeAmb = (type, baseFreq, modFreq) => {
+      const n = new Tone.Noise('pink');
+      const f = new Tone.Filter({ type, frequency:baseFreq, Q: type==='bandpass'?1.2:0.7 });
+      const g = new Tone.Gain(0); const lfo = new Tone.LFO(modFreq, 0.25, 1).start();
+      lfo.connect(g.gain); n.connect(f).connect(g).connect(preGain); return { n,g,f };
+    }
+    const rain = makeAmb('lowpass', 3800, 0.05);
+    const ocean = makeAmb('lowpass', 1200, 0.03);
+    const fire = makeAmb('bandpass', 2500, 0.4);
+    rain.g.gain.value = state.amb.rain; ocean.g.gain.value = state.amb.ocean; fire.g.gain.value = state.amb.fire;
+
+    // Musical logic
+    const scale = MODES[state.mode].scale; const key = MODES[state.mode].key; const oct = MODES[state.mode].oct;
+    const density = clamp(0.15 + state.intensity*0.006, 0.15, 0.95);
+    let prog = MODES[state.mode].prog[Math.floor(Math.random()*MODES[state.mode].prog.length)]; let progStep=0;
+    const triad = (deg)=>{ const third = scale[(scale.indexOf(0)+2)%scale.length]-0; const fifth = scale[(scale.indexOf(0)+4)%scale.length]-0; return [deg, deg+third, deg+fifth]; };
+
+    const padLoop = new Tone.Loop((time)=>{
+      const deg = prog[progStep % prog.length]; const chord = triad(deg).map((s,i)=>toNote(key, oct+(i===0?0:1), s));
+      padLayer1.triggerAttackRelease(chord, '1m', time+0.01);
+      padLayer2.triggerAttackRelease(chord.map(n=>Tone.Frequency(n).transpose(12)), '1m', time+0.02);
+      progStep++;
+    }, '1m');
+
+    const arpSeq = new Tone.Sequence((time)=>{
+      if (Math.random() < density){ const off = scale[Math.floor(Math.random()*scale.length)] + (Math.random()<0.25?12:0); const note = toNote(key, oct+1, off); const t=time + (Math.random()-0.5)*0.02; arpSynth.triggerAttackRelease(note, '8n', t);} }, new Array(16).fill(0), '8n');
+
+    const bassLoop = new Tone.Loop((time)=>{ const deg = prog[(progStep+3)%prog.length]; const note = toNote(key, oct-1, deg); bass.triggerAttackRelease(note, '2n', time); }, '2n');
+
+    const percLoop = new Tone.Loop((time)=>{ if (state.mode==='sleep' && Math.random()<0.6) return; tick.triggerAttackRelease('G1','32n',time); if (Math.random() < (state.mode==='activity'?0.9:0.6)){ const t=time+(Math.random()*0.2-0.1); noiseEnv.triggerAttackRelease(0.08,t);} }, '4n');
+
+    rain.n.start(); ocean.n.start(); fire.n.start();
+    if (!started){ Tone.Transport.start(); started=true; }
+    padLoop.start(0); arpSeq.start(0); bassLoop.start(0); percLoop.start(0);
+
+    nodes = { preGain, eq, widener, multiband, limiter, master, analyser, bigRev, smallRev, delay, chorus,
+              padLayer1, padLayer2, padFilter, padBus, arpSynth, arpFilter, arpBus, bass, bassBus,
+              tick, noise, noiseEnv, noiseHP, percBus, rain, ocean, fire, padLoop, arpSeq, bassLoop, percLoop };
+  }
+
+  function teardown(){
+    try{ nodes.padLoop?.stop(); nodes.arpSeq?.stop(); nodes.bassLoop?.stop(); nodes.percLoop?.stop(); }catch{}
+    try{ nodes.rain?.n?.stop(); nodes.ocean?.n?.stop(); nodes.fire?.n?.stop(); }catch{}
+    for (const k in nodes){ try{ nodes[k]?.dispose?.(); }catch{} }
+    nodes = {};
+  }
+
+  function updateRealtime(){
+    if (!nodes.padFilter) return;
+    nodes.padFilter.frequency.rampTo(1200 + state.intensity*12, 0.5);
+    nodes.padBus?.gain.rampTo(state.gains.pad, 0.2);
+    nodes.arpBus?.gain.rampTo(state.gains.arp, 0.2);
+    nodes.bassBus?.gain.rampTo(state.gains.bass, 0.2);
+    nodes.percBus?.gain.rampTo(state.gains.perc, 0.2);
+    nodes.rain?.g?.gain.rampTo(state.amb.rain, 0.2);
+    nodes.ocean?.g?.gain.rampTo(state.amb.ocean, 0.2);
+    nodes.fire?.g?.gain.rampTo(state.amb.fire, 0.2);
+  }
+
+  // ==== Timer ====
+  let timerId=null; function startTimer(){ if (state.minutes===0) { remain.style.display='none'; return; } const end = Date.now()+state.minutes*60*1000; remain.style.display='block';
+    timerId = setInterval(()=>{ const left = Math.max(0, Math.round((end-Date.now())/1000)); state.remainSec=left; const m=Math.floor(left/60), s=String(left%60).padStart(2,'0'); remain.textContent = `Remaining: ${m}:${s}`; if (left<=0){ clearInterval(timerId); timerId=null; togglePlay(false);} }, 500);
+  }
+  function stopTimer(){ if (timerId){ clearInterval(timerId); timerId=null; } remain.style.display='none'; }
+
+  // ==== UI setup ====
+  function renderModes(){
+    modeChips.innerHTML=''; Object.entries(MODES).forEach(([k,v])=>{
+      const b=document.createElement('button'); b.className='chip'+(state.mode===k?' active':''); b.textContent=v.label; b.onclick=()=>{ state.mode=k; modeDesc.textContent=v.desc; document.getElementById('ambRain').value=v.amb.rain; document.getElementById('ambOcean').value=v.amb.ocean; document.getElementById('ambFire').value=v.amb.fire; state.amb={...v.amb}; updateBrand(); if(state.playing){ teardown(); buildEngine(); } };
+      modeChips.appendChild(b);
+    });
+    modeDesc.textContent = MODES[state.mode].desc;
+  }
+  function renderBrands(){
+    brandChips.innerHTML=''; Object.keys(BRANDS).forEach((k)=>{ const b=document.createElement('button'); b.className='chip'+(state.brand===k?' active':''); b.textContent=k; b.onclick=()=>{ state.brand=k; updateBrand(); }; brandChips.appendChild(b); });
+  }
+
+  // ==== Events ====
+  playBtn.onclick = async ()=>{ togglePlay(!state.playing) };
+  function setPlayUI(){ playBtn.textContent = state.playing? 'Pause':'Play'; }
+  async function togglePlay(next){ if (next){ await buildEngine(); drawViz(); startTimer(); } else { stopTimer(); teardown(); cancelAnimationFrame(raf); } state.playing=next; setPlayUI(); }
+
+  intensity.oninput = ()=>{ state.intensity = parseInt(intensity.value); intensityVal.textContent = state.intensity; updateRealtime(); }
+  minutesSel.onchange = ()=>{ state.minutes=parseInt(minutesSel.value); if(state.playing){ stopTimer(); startTimer(); } }
+
+  function bindRange(el, key, label){ el.oninput = ()=>{ state.gains[key]=parseFloat(el.value); document.getElementById(label).textContent = Math.round(state.gains[key]*100)+'%'; updateRealtime(); } }
+  bindRange(gainPad,'pad','gainPadVal'); bindRange(gainArp,'arp','gainArpVal'); bindRange(gainBass,'bass','gainBassVal'); bindRange(gainPerc,'perc','gainPercVal');
+
+  ambRain.oninput=()=>{ state.amb.rain=parseFloat(ambRain.value); updateRealtime(); }
+  ambOcean.oninput=()=>{ state.amb.ocean=parseFloat(ambOcean.value); updateRealtime(); }
+  ambFire.oninput=()=>{ state.amb.fire=parseFloat(ambFire.value); updateRealtime(); }
+
+  savePresetBtn.onclick=()=>{ const data = { mode:state.mode,intensity:state.intensity,gains:state.gains,amb:state.amb,minutes:state.minutes }; const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`flowsound_${state.mode}.json`; a.click(); URL.revokeObjectURL(url); }
+  loadPresetInput.onchange=(e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d.mode){ state.mode=d.mode; } if(d.intensity!=null){ state.intensity=d.intensity; intensity.value=d.intensity; intensityVal.textContent=d.intensity; } if(d.gains){ state.gains=d.gains; gainPad.value=d.gains.pad; gainPadVal.textContent=Math.round(d.gains.pad*100)+'%'; gainArp.value=d.gains.arp; gainArpVal.textContent=Math.round(d.gains.arp*100)+'%'; gainBass.value=d.gains.bass; gainBassVal.textContent=Math.round(d.gains.bass*100)+'%'; gainPerc.value=d.gains.perc; gainPercVal.textContent=Math.round(d.gains.perc*100)+'%'; } if(d.amb){ state.amb=d.amb; ambRain.value=d.amb.rain; ambOcean.value=d.amb.ocean; ambFire.value=d.amb.fire; } if(d.minutes!=null){ state.minutes=d.minutes; minutesSel.value=d.minutes; } renderModes(); updateBrand(); if(state.playing){ teardown(); buildEngine(); } else { updateRealtime(); } } catch{ alert('Invalid preset'); } }; r.readAsText(f); }
+
+  // Init
+  updateBrand(); renderModes(); renderBrands(); drawViz();
+</script>
+</body>
+</html>

@@ -1,379 +1,648 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="ru">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FlowSound Pro — Single‑File</title>
-  <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+  <title>Английские карточки — 1 файл</title>
   <style>
     :root{
-      --bg-from:#f8fafc; /* slate-50 */
-      --bg-to:#f5f5f4;   /* stone-100 */
-      --text:#0a0a0a;
-      --muted:#6b7280;
-      --card:#ffffffbb;
-      --border:#0000001a;
-      --black:#000;
+      --bg:#0b0c0f;         /* near-black for depth */
+      --panel:#111318;      /* card bg */
+      --panel-2:#151820;
+      --text:#e8e8ea;       /* primary text */
+      --muted:#a7acb9;      /* secondary */
+      --accent:#22c55e;     /* green */
+      --accent-2:#3b82f6;   /* blue */
+      --danger:#ef4444;     /* red */
+      --shadow:0 10px 30px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.2);
+      --radius:18px;
     }
-    *{box-sizing:border-box} body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Apple Color Emoji","Segoe UI Emoji";color:var(--text);background:linear-gradient(135deg,var(--bg-from),var(--bg-to)) fixed;}
-    .container{max-width:1100px;margin:0 auto;padding:16px}
-    header{position:sticky;top:0;backdrop-filter:saturate(1.2) blur(8px);background:#ffffff88;border-bottom:1px solid var(--border);z-index:10}
-    .row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0}
-    .logo{display:flex;align-items:center;gap:10px}
-    .dot{width:28px;height:28px;border-radius:12px;background:#000}
-    .btn{border:none;border-radius:999px;padding:10px 16px;background:#000;color:#fff;cursor:pointer;font-weight:600}
-    .btn-outline{background:#fff;color:#000;border:1px solid #00000033}
-    .grid{display:grid;gap:16px}
-    @media(min-width:920px){.grid-3{grid-template-columns:2fr 1fr}}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px}
-    h1{margin:0;font-size:40px;letter-spacing:-0.02em}
-    h2{margin:0 0 8px 0;font-size:22px}
-    p.muted{color:var(--muted)}
-    .chips{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
-    .chip{border:1px solid #00000033;border-radius:999px;padding:8px 14px;background:#fff;cursor:pointer;font-size:14px}
-    .chip.active{background:#000;color:#fff;border-color:#000}
-    .field{margin-top:12px}
-    .label{font-size:14px;font-weight:600}
-    .range{width:100%}
-    .mini{font-size:12px;color:#6b7280}
-    .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .knobs{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-    .visual{width:100%;height:70px;border-radius:10px;border:1px solid var(--border);background:#ffffffb3}
-    footer{margin-top:auto;border-top:1px solid var(--border);background:#ffffff88}
-    .row-sm{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;font-size:12px;color:#6b7280}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial;
+      background: radial-gradient(1000px 600px at 100% -10%, #0f172a 0%, #0b0c0f 55%) fixed;
+      color:var(--text);
+    }
+    .app{max-width:1000px;margin:0 auto;padding:24px 16px 80px}
+    header{
+      position:sticky;top:0;z-index:50;
+      backdrop-filter:saturate(160%) blur(10px);
+      background:linear-gradient(180deg, rgba(17,19,24,.9), rgba(17,19,24,.65));
+      border-bottom:1px solid rgba(255,255,255,.06);
+    }
+    .bar{display:flex;align-items:center;gap:12px;max-width:1000px;margin:0 auto;padding:12px 16px}
+    .logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.3px}
+    .logo-dot{width:10px;height:10px;border-radius:999px;background:conic-gradient(from 220deg, #22c55e, #3b82f6)}
+    .spacer{flex:1}
+    .menu-btn{border:none;border-radius:999px;padding:10px 14px;background:var(--panel-2);color:var(--text);box-shadow:var(--shadow);cursor:pointer}
+    .menu-panel{position:absolute;right:16px;top:60px;background:var(--panel);border:1px solid rgba(255,255,255,.06);border-radius:16px;box-shadow:var(--shadow);display:none;min-width:260px}
+    .menu-panel.open{display:block}
+    .menu-list{display:flex;flex-direction:column}
+    .menu-item{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer}
+    .menu-item:last-child{border-bottom:none}
+    .menu-item:hover{background:rgba(255,255,255,.04)}
+
+    /* screens */
+    .screen{display:none;animation:fade .25s ease}
+    .screen.active{display:block}
+    @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+    .hero{display:grid;gap:16px;grid-template-columns:1fr;max-width:860px;margin:32px auto}
+    .tile{background:linear-gradient(180deg, var(--panel), var(--panel-2));border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+    .tile-title{font-size:20px;font-weight:700}
+    .tile-sub{color:var(--muted);font-size:14px}
+    .tile .actions{display:flex;gap:10px}
+    .btn{border:none;border-radius:12px;padding:10px 14px;background:#1f2430;color:var(--text);cursor:pointer}
+    .btn.primary{background:var(--accent-2);color:white}
+    .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.12)}
+
+    /* list view */
+    .list-top{display:flex;align-items:center;gap:12px;justify-content:space-between;margin:24px 0}
+    .search{flex:1;display:flex;gap:10px}
+    .search input{width:100%;padding:12px 14px;border-radius:12px;background:#0f1220;color:var(--text);border:1px solid rgba(255,255,255,.08)}
+    .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+    .row{background:var(--panel);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px}
+    .row .w{font-weight:700}
+    .row .t{color:var(--muted)}
+
+    /* learn view */
+    .learn-wrap{max-width:720px;margin:22px auto}
+    .progress{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px;color:var(--muted)}
+    .card{position:relative;background:linear-gradient(180deg, #131722, #131722);border:1px solid rgba(255,255,255,.08);border-radius:22px;padding:22px 22px 26px;box-shadow:var(--shadow)}
+    .check{position:absolute;right:16px;top:16px;width:44px;height:44px;border-radius:999px;border:none;background:radial-gradient(120px 120px at 20% 10%, #3bd17e, #1b8a46);box-shadow:0 10px 25px rgba(34,197,94,.35);color:white;font-size:20px;font-weight:900;cursor:pointer}
+
+    .word{font-size:34px;font-weight:800;letter-spacing:.3px;margin:8px 0 2px}
+    .translation{font-size:18px;color:var(--muted)}
+    .ipa{display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:6px 10px;border-radius:999px;background:#0e1220;border:1px solid rgba(255,255,255,.08);cursor:pointer}
+    .ipa small{color:#9aa3b2}
+    .example{margin-top:14px;font-size:16px}
+    .example .ru{color:#b9becb;margin-top:6px}
+
+    .controls{display:flex;gap:10px;margin-top:16px}
+    .pill{padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:#0e1220;color:var(--text);cursor:pointer}
+    .pill.bad{border-color:rgba(239,68,68,.5)}
+
+    .badge{display:inline-flex;gap:8px;align-items:center;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:#0e1220}
+
+    .empty{opacity:.8;color:var(--muted);text-align:center;padding:40px 10px}
+    .hint{color:#93a0b5;font-size:13px;margin-top:6px}
   </style>
 </head>
 <body>
   <header>
-    <div class="container row">
-      <div class="logo"><div class="dot"></div><b>FlowSound Pro</b></div>
-      <div><button id="playBtn" class="btn">Play</button></div>
+    <div class="bar">
+      <div class="logo"><span class="logo-dot"></span> Английские карточки</div>
+      <div class="spacer"></div>
+      <button class="menu-btn" id="menuBtn">Меню ▾</button>
+      <div class="menu-panel" id="menuPanel" role="menu" aria-hidden="true">
+        <div class="menu-list">
+          <div class="menu-item" data-nav="home">Главный экран</div>
+          <div class="menu-item" data-nav="wordsList">3000 слов — список</div>
+          <div class="menu-item" data-nav="learnWords">Учить слова</div>
+          <div class="menu-item" data-nav="phrasalsList">Фразовые глаголы — список</div>
+          <div class="menu-item" data-nav="learnPhrasals">Учить фразовые глаголы</div>
+          <div class="menu-item" data-nav="learned">Выученные слова</div>
+          <div class="menu-item" id="resetAll">Сбросить прогресс</div>
+        </div>
+      </div>
     </div>
   </header>
 
-  <main class="container grid grid-3" style="padding-top:20px;padding-bottom:24px">
-    <section class="card">
-      <h1>Adaptive soundscapes, now richer</h1>
-      <p class="muted">Higher fidelity chain, chord progressions, ambience layers, and a live mixer. Built with Web Audio (Tone.js), runs fully on‑device.</p>
-      <canvas id="viz" class="visual" width="900" height="70"></canvas>
-
-      <div class="chips" id="modeChips"></div>
-      <div class="mini" id="modeDesc"></div>
-
-      <div class="two" style="margin-top:16px">
-        <div class="card" style="padding:16px">
-          <div class="label">Intensity</div>
-          <input id="intensity" class="range" type="range" min="0" max="100" value="40" />
-          <div class="mini"><span id="intensityVal">40</span>%</div>
-          <div class="field">
-            <label class="label">Session</label>
-            <select id="minutes" style="width:100%;margin-top:6px;border:1px solid #00000033;border-radius:12px;padding:8px;background:#fff">
-              <option value="0">No timer</option>
-              <option value="10">10 minutes</option>
-              <option value="15">15 minutes</option>
-              <option value="30">30 minutes</option>
-              <option value="45">45 minutes</option>
-              <option value="60">60 minutes</option>
-            </select>
-            <div class="mini" id="remain" style="margin-top:6px;display:none"></div>
+  <main class="app">
+    <!-- HOME -->
+    <section id="home" class="screen active">
+      <div class="hero">
+        <div class="tile">
+          <div>
+            <div class="tile-title">3000 слов (продвинутые и частые)</div>
+            <div class="tile-sub">Список + режим обучения с активной «десяткой» и повторением через 5 карточек.</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-nav="wordsList">Список</button>
+            <button class="btn primary" data-nav="learnWords">Учить слова</button>
           </div>
         </div>
-        <div class="card" style="padding:16px">
-          <div class="label">Brand theme</div>
-          <div class="chips" id="brandChips" style="margin-top:8px"></div>
-          <div class="chips" style="margin-top:8px">
-            <button id="savePreset" class="btn btn-outline">Save preset</button>
-            <label class="btn btn-outline" style="cursor:pointer">Load preset<input id="loadPreset" type="file" accept="application/json" style="display:none"/></label>
+        <div class="tile">
+          <div>
+            <div class="tile-title">Фразовые глаголы</div>
+            <div class="tile-sub">Самые употребимые phrasal verbs с примерами и озвучкой.</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-nav="phrasalsList">Список</button>
+            <button class="btn primary" data-nav="learnPhrasals">Учить глаголы</button>
           </div>
         </div>
+        <div class="tile">
+          <div>
+            <div class="tile-title">Выученные</div>
+            <div class="tile-sub">Все отмеченные ✔️ карточки в одном месте.</div>
+          </div>
+          <div class="actions">
+            <button class="btn" data-nav="learned">Открыть</button>
+          </div>
+        </div>
+      </div>
+      <p class="hint">ℹ️ Клик по транскрипции воспроизводит произношение (Web Speech API). Прогресс сохраняется локально (LocalStorage).</p>
+    </section>
+
+    <!-- WORDS LIST -->
+    <section id="wordsList" class="screen">
+      <div class="list-top">
+        <div class="badge" id="wordsCount">Загружаю…</div>
+        <div class="search"><input id="searchWords" placeholder="Поиск по словам или переводу…" /></div>
+        <button class="btn primary" data-nav="learnWords">Учить слова</button>
+      </div>
+      <div class="list" id="wordsListContainer"></div>
+    </section>
+
+    <!-- LEARN WORDS -->
+    <section id="learnWords" class="screen">
+      <div class="learn-wrap">
+        <div class="progress">
+          <div class="badge" id="wordsProgress">0 / 0</div>
+          <div class="badge" id="activeBadge">Активная 10-кa: 0/10</div>
+        </div>
+        <div class="card" id="wordCard">
+          <button class="check" id="checkWord" title="Отметить как выученное">✔</button>
+          <div class="translation" id="wordTopic">Слово</div>
+          <div class="word" id="wordText">—</div>
+          <div class="translation" id="wordRu">—</div>
+          <div class="ipa" id="wordIpa" title="Произнести">/<span>…</span>/ <small>▶︎</small></div>
+          <div class="example">
+            <div id="wordExEn">—</div>
+            <div class="ru" id="wordExRu">—</div>
+          </div>
+          <div class="controls">
+            <button class="pill" id="skip5">Повторить позже (через 5)</button>
+            <button class="pill bad" id="dontKnow">Не знаю</button>
+          </div>
+        </div>
+        <div class="hint">Карточки выводятся в перемешанном порядке. Неотмеченные слова автоматически возвращаются в очередь через 5 карточек. Как только из «десятки» уходит слово (✔), на его место добавляется новое — пока не изучите всё.</div>
       </div>
     </section>
 
-    <aside class="card">
-      <div style="font-weight:600;font-size:18px">Mixer</div>
-      <div class="knobs" style="margin-top:12px">
-        <div>
-          <div class="label">Pad</div>
-          <input id="gainPad" class="range" type="range" min="0" max="1" step="0.01" value="0.7" />
-          <div class="mini" id="gainPadVal">70%</div>
+    <!-- PHRASALS LIST -->
+    <section id="phrasalsList" class="screen">
+      <div class="list-top">
+        <div class="badge" id="phrasalsCount">Загружаю…</div>
+        <div class="search"><input id="searchPhr" placeholder="Поиск по фразовым…" /></div>
+        <button class="btn primary" data-nav="learnPhrasals">Учить глаголы</button>
+      </div>
+      <div class="list" id="phrListContainer"></div>
+    </section>
+
+    <!-- LEARN PHRASALS -->
+    <section id="learnPhrasals" class="screen">
+      <div class="learn-wrap">
+        <div class="progress">
+          <div class="badge" id="phrProgress">0 / 0</div>
+          <div class="badge" id="activeBadgePhr">Активная 10-кa: 0/10</div>
         </div>
-        <div>
-          <div class="label">Arp</div>
-          <input id="gainArp" class="range" type="range" min="0" max="1" step="0.01" value="0.45" />
-          <div class="mini" id="gainArpVal">45%</div>
+        <div class="card" id="phrCard">
+          <button class="check" id="checkPhr" title="Отметить как выученное">✔</button>
+          <div class="translation" id="phrTopic">Фразовый глагол</div>
+          <div class="word" id="phrText">—</div>
+          <div class="translation" id="phrRu">—</div>
+          <div class="ipa" id="phrIpa" title="Произнести">/<span>…</span>/ <small>▶︎</small></div>
+          <div class="example">
+            <div id="phrExEn">—</div>
+            <div class="ru" id="phrExRu">—</div>
+          </div>
+          <div class="controls">
+            <button class="pill" id="skip5Phr">Повторить позже (через 5)</button>
+            <button class="pill bad" id="dontKnowPhr">Не знаю</button>
+          </div>
         </div>
-        <div>
-          <div class="label">Bass</div>
-          <input id="gainBass" class="range" type="range" min="0" max="1" step="0.01" value="0.4" />
-          <div class="mini" id="gainBassVal">40%</div>
-        </div>
-        <div>
-          <div class="label">Perc</div>
-          <input id="gainPerc" class="range" type="range" min="0" max="1" step="0.01" value="0.25" />
-          <div class="mini" id="gainPercVal">25%</div>
+        <div class="hint">Правила такие же, как для слов: повтор через 5, активная «десятка», сохранение прогресса.</div>
+      </div>
+    </section>
+
+    <!-- LEARNED -->
+    <section id="learned" class="screen">
+      <div class="list-top">
+        <div class="badge" id="learnedCount">—</div>
+        <div class="actions">
+          <button class="btn ghost" id="exportBtn">Экспорт JSON</button>
         </div>
       </div>
-      <div class="label" style="margin-top:14px">Ambience</div>
-      <div class="three" style="margin-top:8px">
-        <div>
-          <div class="mini">Rain</div>
-          <input id="ambRain" class="range" type="range" min="0" max="1" step="0.01" value="0.15" />
-        </div>
-        <div>
-          <div class="mini">Ocean</div>
-          <input id="ambOcean" class="range" type="range" min="0" max="1" step="0.01" value="0.1" />
-        </div>
-        <div>
-          <div class="mini">Fire</div>
-          <input id="ambFire" class="range" type="range" min="0" max="1" step="0.01" value="0.0" />
-        </div>
-      </div>
-      <div class="mini" style="margin-top:8px">Tip: if sound feels harsh, slightly lower Intensity and Arp/Perc.</div>
-    </aside>
+      <div class="list" id="learnedContainer"></div>
+      <div class="empty" id="learnedEmpty" style="display:none">Пока пусто. Отмечайте карточки ✔ во время обучения.</div>
+    </section>
   </main>
 
-  <footer>
-    <div class="container row-sm">
-      <div>© <span id="year"></span> FlowSound Pro</div>
-      <div style="display:flex;gap:12px"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Support</a></div>
-    </div>
-  </footer>
+  <script>
+  // --------------------------- DATA ---------------------------
+  // Для демонстрации включена компактная выборка. Структура поддерживает 3000+.
+  // При необходимости массив можно расширить — всё будет работать без изменений.
+  const WORDS_ADVANCED = [
+    { w:"acknowledge", ru:"признавать, подтверждать", ipa:"ækˈnɑːlɪdʒ", exEn:"She refused to acknowledge her mistake.", exRu:"Она отказалась признать свою ошибку." },
+    { w:"acquire", ru:"приобретать", ipa:"əˈkwaɪər", exEn:"He acquired new skills during the course.", exRu:"Он приобрёл новые навыки во время курса." },
+    { w:"adjust", ru:"настраивать, корректировать", ipa:"əˈdʒʌst", exEn:"You need to adjust the settings.", exRu:"Нужно настроить параметры." },
+    { w:"advocate", ru:"защищать, выступать за", ipa:"ˈædvəkeɪt", exEn:"They advocate for equal rights.", exRu:"Они выступают за равные права." },
+    { w:"allocate", ru:"распределять, выделять", ipa:"ˈæləkeɪt", exEn:"We must allocate resources wisely.", exRu:"Нужно разумно распределять ресурсы." },
+    { w:"alter", ru:"изменять", ipa:"ˈɔːltər", exEn:"The plan may alter slightly.", exRu:"План может немного измениться." },
+    { w:"anticipate", ru:"ожидать, предвидеть", ipa:"ænˈtɪsɪpeɪt", exEn:"We anticipate strong results this year.", exRu:"Мы ожидаем сильные результаты в этом году." },
+    { w:"apparent", ru:"очевидный, явный", ipa:"əˈpærənt", exEn:"It became apparent that he was right.", exRu:"Стало очевидно, что он был прав." },
+    { w:"approach", ru:"подход; подходить", ipa:"əˈproʊtʃ", exEn:"This approach worked well.", exRu:"Этот подход сработал хорошо." },
+    { w:"appropriate", ru:"соответствующий, уместный", ipa:"əˈproʊpriət", exEn:"Choose appropriate language.", exRu:"Выбирайте уместный язык." },
+    { w:"arbitrary", ru:"произвольный, случайный", ipa:"ˈɑːrbɪtreri", exEn:"The choice seemed arbitrary.", exRu:"Выбор казался произвольным." },
+    { w:"assert", ru:"утверждать, отстаивать", ipa:"əˈsɜːrt", exEn:"He asserted his innocence.", exRu:"Он утверждал, что невиновен." },
+    { w:"assess", ru:"оценивать", ipa:"əˈsɛs", exEn:"We need to assess the risks.", exRu:"Нужно оценить риски." },
+    { w:"assumption", ru:"предположение", ipa:"əˈsʌmpʃən", exEn:"That assumption is not accurate.", exRu:"Это предположение неточно." },
+    { w:"attain", ru:"достигать", ipa:"əˈteɪn", exEn:"She attained her goal.", exRu:"Она достигла своей цели." },
+    { w:"aware", ru:"осведомлённый", ipa:"əˈwɛr", exEn:"Are you aware of the changes?", exRu:"Вы осведомлены об изменениях?" },
+    { w:"barrier", ru:"барьер, препятствие", ipa:"ˈbæriər", exEn:"Language was a major barrier.", exRu:"Язык был серьёзным препятствием." },
+    { w:"benefit", ru:"польза; извлекать пользу", ipa:"ˈbɛnɪfɪt", exEn:"You will benefit from practice.", exRu:"Вы получите пользу от практики." },
+    { w:"bias", ru:"предвзятость", ipa:"ˈbaɪəs", exEn:"We try to avoid bias.", exRu:"Мы стараемся избегать предвзятости." },
+    { w:"capability", ru:"возможность, способность", ipa:"ˌkeɪpəˈbɪləti", exEn:"The device has new capabilities.", exRu:"Устройство получило новые возможности." },
+    { w:"capacity", ru:"ёмкость; способность", ipa:"kəˈpæsɪti", exEn:"The stadium is at full capacity.", exRu:"Стадион заполнен до отказа." },
+    { w:"cease", ru:"прекращать", ipa:"siːs", exEn:"The noise finally ceased.", exRu:"Шум наконец прекратился." },
+    { w:"coherent", ru:"связный, понятный", ipa:"koʊˈhɪrənt", exEn:"Please be coherent in your argument.", exRu:"Пожалуйста, излагайте мысль связно." },
+    { w:"commodity", ru:"товар, сырьё", ipa:"kəˈmɒdəti", exEn:"Oil is a global commodity.", exRu:"Нефть — мировой товар." },
+    { w:"compatible", ru:"совместимый", ipa:"kəmˈpætəbl", exEn:"Is this file compatible with Mac?", exRu:"Этот файл совместим с Mac?" },
+    { w:"compile", ru:"составлять; компилировать", ipa:"kəmˈpaɪl", exEn:"We compiled the report.", exRu:"Мы составили отчёт." },
+    { w:"complement", ru:"дополнять", ipa:"ˈkɒmplɪˌmɛnt", exEn:"This sauce complements the dish.", exRu:"Этот соус дополняет блюдо." },
+    { w:"comply", ru:"соблюдать, подчиняться", ipa:"kəmˈplaɪ", exEn:"You must comply with the rules.", exRu:"Вы должны соблюдать правила." },
+    { w:"comprehensive", ru:"всесторонний, полный", ipa:"ˌkɒmprɪˈhɛnsɪv", exEn:"We made a comprehensive plan.", exRu:"Мы составили всесторонний план." },
+    { w:"comprise", ru:"включать, состоять из", ipa:"kəmˈpraɪz", exEn:"The book comprises ten chapters.", exRu:"Книга состоит из десяти глав." },
+    { w:"concede", ru:"признавать, уступать", ipa:"kənˈsiːd", exEn:"He conceded defeat.", exRu:"Он признал поражение." },
+    { w:"conceive", ru:"задумать; постичь", ipa:"kənˈsiːv", exEn:"It’s hard to conceive the scale.", exRu:"Трудно представить масштаб." },
+    { w:"concise", ru:"краткий, чёткий", ipa:"kənˈsaɪs", exEn:"Give a concise answer.", exRu:"Дайте краткий ответ." },
+    { w:"conduct", ru:"проводить; поведение", ipa:"kənˈdʌkt", exEn:"They conducted an experiment.", exRu:"Они провели эксперимент." },
+    { w:"confer", ru:"совещаться; присваивать", ipa:"kənˈfɜːr", exEn:"The board conferred the title.", exRu:"Совет присвоил звание." },
+    { w:"confident", ru:"уверенный", ipa:"ˈkɒnfɪdənt", exEn:"She is confident about the test.", exRu:"Она уверена в экзамене." },
+    { w:"confirm", ru:"подтверждать", ipa:"kənˈfɜːrm", exEn:"Please confirm your email.", exRu:"Пожалуйста, подтвердите почту." },
+    { w:"consecutive", ru:"последовательный, подряд", ipa:"kənˈsɛkjətɪv", exEn:"Three consecutive wins.", exRu:"Три победы подряд." },
+    { w:"considerable", ru:"значительный", ipa:"kənˈsɪdərəbl", exEn:"A considerable amount of time.", exRu:"Значительное количество времени." },
+    { w:"consistent", ru:"последовательный, стабильный", ipa:"kənˈsɪstənt", exEn:"Be consistent with your practice.", exRu:"Будьте последовательны в практике." },
+    { w:"constitute", ru:"составлять; учреждать", ipa:"ˈkɒnstɪˌtjuːt", exEn:"These actions constitute a crime.", exRu:"Эти действия составляют преступление." },
+    { w:"constraint", ru:"ограничение", ipa:"kənˈstreɪnt", exEn:"Budget is a major constraint.", exRu:"Бюджет — серьёзное ограничение." },
+    { w:"consult", ru:"консультироваться", ipa:"kənˈsʌlt", exEn:"Consult a specialist.", exRu:"Проконсультируйтесь со специалистом." },
+    { w:"consume", ru:"потреблять", ipa:"kənˈsuːm", exEn:"We consume too much sugar.", exRu:"Мы потребляем слишком много сахара." },
+    { w:"contemporary", ru:"современный", ipa:"kənˈtɛm.pə.rɛri", exEn:"A contemporary artist.", exRu:"Современный художник." },
+    { w:"controversial", ru:"спорный", ipa:"ˌkɒntrəˈvɜːʃəl", exEn:"A controversial decision.", exRu:"Спорное решение." },
+    { w:"convey", ru:"передавать, доносить", ipa:"kənˈveɪ", exEn:"Words can’t convey my feelings.", exRu:"Слова не могут передать мои чувства." },
+    { w:"cope", ru:"справляться", ipa:"koʊp", exEn:"She can cope with stress.", exRu:"Она справляется со стрессом." },
+    { w:"corporate", ru:"корпоративный", ipa:"ˈkɔːrpərət", exEn:"Corporate culture matters.", exRu:"Корпоративная культура важна." },
+    { w:"credible", ru:"заслуживающий доверия", ipa:"ˈkrɛdəbl", exEn:"A credible source.", exRu:"Достоверный источник." },
+    { w:"criterion", ru:"критерий", ipa:"kraɪˈtɪəriən", exEn:"Safety is the main criterion.", exRu:"Безопасность — главный критерий." },
+    { w:"crucial", ru:"решающий, ключевой", ipa:"ˈkruːʃəl", exEn:"Timing is crucial.", exRu:"Время имеет решающее значение." },
+    { w:"cumulative", ru:"накопительный", ipa:"ˈkjuːmjəleɪtɪv", exEn:"Cumulative effect over time.", exRu:"Накопительный эффект со временем." },
+    { w:"dedicate", ru:"посвящать", ipa:"ˈdɛdɪkeɪt", exEn:"He dedicated his life to science.", exRu:"Он посвятил жизнь науке." },
+    { w:"derive", ru:"получать; происходить", ipa:"dɪˈraɪv", exEn:"Many words derive from Latin.", exRu:"Многие слова происходят от латинского." },
+    { w:"diminish", ru:"уменьшать(ся)", ipa:"dɪˈmɪnɪʃ", exEn:"The pain diminished.", exRu:"Боль уменьшилась." },
+    { w:"distribute", ru:"распределять", ipa:"dɪˈstrɪbjuːt", exEn:"Distribute the tasks fairly.", exRu:"Распределите задачи справедливо." },
+    { w:"diverse", ru:"разнообразный", ipa:"daɪˈvɜːrs", exEn:"A diverse audience.", exRu:"Разнообразная аудитория." },
+    { w:"elaborate", ru:"разрабатывать подробно", ipa:"ɪˈlæbərət", exEn:"Please elaborate on your idea.", exRu:"Пожалуйста, подробно объясните вашу идею." },
+    { w:"emerge", ru:"появляться, возникать", ipa:"ɪˈmɜːrdʒ", exEn:"A pattern emerged.", exRu:"Появилась закономерность." },
+    { w:"enhance", ru:"усиливать, улучшать", ipa:"ɪnˈhæns", exEn:"Enhance the image quality.", exRu:"Улучшите качество изображения." },
+    { w:"enormous", ru:"огромный", ipa:"ɪˈnɔːrməs", exEn:"An enormous impact.", exRu:"Огромное влияние." },
+    { w:"ensure", ru:"обеспечивать, гарантировать", ipa:"ɪnˈʃʊr", exEn:"Ensure accuracy.", exRu:"Обеспечьте точность." },
+    { w:"establish", ru:"устанавливать, создавать", ipa:"ɪˈstæblɪʃ", exEn:"Establish trust first.", exRu:"Сначала установите доверие." },
+    { w:"evaluate", ru:"оценивать", ipa:"ɪˈvæljueɪt", exEn:"Evaluate the results.", exRu:"Оцените результаты." },
+    { w:"evident", ru:"очевидный", ipa:"ˈɛvɪdənt", exEn:"It became evident later.", exRu:"Позже это стало очевидным." },
+    { w:"exceed", ru:"превышать", ipa:"ɪkˈsiːd", exEn:"Costs exceeded the budget.", exRu:"Расходы превысили бюджет." },
+    { w:"feasible", ru:"осуществимый", ipa:"ˈfiːzəbl", exEn:"A feasible solution.", exRu:"Осуществимое решение." },
+    { w:"fluctuate", ru:"колебаться", ipa:"ˈflʌktʃueɪt", exEn:"Prices fluctuate daily.", exRu:"Цены колеблются ежедневно." },
+    { w:"framework", ru:"рамки; структура", ipa:"ˈfreɪmwɜːrk", exEn:"A legal framework.", exRu:"Правовая рамка." },
+    { w:"fundamental", ru:"фундаментальный", ipa:"ˌfʌndəˈmɛntl", exEn:"A fundamental change.", exRu:"Фундаментальное изменение." },
+    { w:"hinder", ru:"препятствовать", ipa:"ˈhɪndər", exEn:"Noise hinders concentration.", exRu:"Шум мешает концентрации." },
+    { w:"hypothesis", ru:"гипотеза", ipa:"haɪˈpɒθəsɪs", exEn:"Test the hypothesis.", exRu:"Проверьте гипотезу." },
+    { w:"implement", ru:"внедрять, реализовывать", ipa:"ˈɪmplɪˌmɛnt", exEn:"Implement the strategy.", exRu:"Реализуйте стратегию." },
+    { w:"imply", ru:"подразумевать", ipa:"ɪmˈplaɪ", exEn:"What does this imply?", exRu:"Что это подразумевает?" },
+    { w:"incentive", ru:"стимул", ipa:"ɪnˈsɛntɪv", exEn:"A financial incentive.", exRu:"Финансовый стимул." },
+    { w:"incur", ru:"понести (расходы/ущерб)", ipa:"ɪnˈkɜːr", exEn:"We incurred extra costs.", exRu:"Мы понесли дополнительные расходы." },
+    { w:"inevitable", ru:"неизбежный", ipa:"ɪnˈɛvɪtəbl", exEn:"Failure was inevitable.", exRu:"Провал был неизбежен." },
+    { w:"insight", ru:"понимание, озарение", ipa:"ˈɪnsaɪt", exEn:"A valuable insight.", exRu:"Ценное озарение." },
+    { w:"integrate", ru:"интегрировать", ipa:"ˈɪntɪˌgreɪt", exEn:"Integrate data sources.", exRu:"Интегрируйте источники данных." },
+    { w:"interpret", ru:"толковать, интерпретировать", ipa:"ɪnˈtɜːrprɪt", exEn:"Interpret the results.", exRu:"Интерпретируйте результаты." },
+    { w:"mitigate", ru:"смягчать, уменьшать", ipa:"ˈmɪtɪgeɪt", exEn:"Mitigate the risks.", exRu:"Снизьте риски." },
+    { w:"notion", ru:"понятие, представление", ipa:"ˈnoʊʃən", exEn:"The notion of freedom.", exRu:"Понятие свободы." },
+    { w:"perceive", ru:"воспринимать", ipa:"pərˈsiːv", exEn:"People perceive colors differently.", exRu:"Люди по-разному воспринимают цвета." },
+    { w:"plausible", ru:"правдоподобный", ipa:"ˈplɔːzəbl", exEn:"A plausible explanation.", exRu:"Правдоподобное объяснение." },
+    { w:"preliminary", ru:"предварительный", ipa:"prɪˈlɪmɪnɛri", exEn:"Preliminary results.", exRu:"Предварительные результаты." },
+    { w:"prevalent", ru:"преобладающий", ipa:"ˈprɛvələnt", exEn:"It’s prevalent in big cities.", exRu:"Это распространено в больших городах." },
+    { w:"prioritize", ru:"расставлять приоритеты", ipa:"praɪˈɔːrəˌtaɪz", exEn:"Prioritize your tasks.", exRu:"Расставьте приоритеты задач." },
+    { w:"prompt", ru:"побуждать; быстрый", ipa:"prɒmpt", exEn:"Her reply was prompt.", exRu:"Её ответ был быстрым." },
+    { w:"prone", ru:"склонный", ipa:"proʊn", exEn:"He is prone to errors.", exRu:"Он склонен к ошибкам." },
+    { w:"prosper", ru:"процветать", ipa:"ˈprɒspər", exEn:"Small businesses can prosper.", exRu:"Малые бизнесы могут процветать." },
+    { w:"profound", ru:"глубокий", ipa:"prəˈfaʊnd", exEn:"A profound change.", exRu:"Глубокое изменение." },
+    { w:"reliable", ru:"надёжный", ipa:"rɪˈlaɪəbl", exEn:"A reliable method.", exRu:"Надёжный метод." },
+    { w:"retain", ru:"удерживать, сохранять", ipa:"rɪˈteɪn", exEn:"Retain key customers.", exRu:"Удерживайте ключевых клиентов." },
+    { w:"scarce", ru:"дефицитный, редкий", ipa:"skɛərs", exEn:"Water is scarce here.", exRu:"Здесь нехватка воды." },
+    { w:"scope", ru:"объём, охват", ipa:"skoʊp", exEn:"Out of scope.", exRu:"Вне рамок." },
+    { w:"significant", ru:"значительный", ipa:"sɪgˈnɪfɪkənt", exEn:"A significant improvement.", exRu:"Значительное улучшение." },
+    { w:"sustain", ru:"поддерживать; устойчивый", ipa:"səˈsteɪn", exEn:"Sustain growth.", exRu:"Поддерживайте рост." },
+    { w:"tangible", ru:"осязаемый, реальный", ipa:"ˈtændʒəbl", exEn:"Tangible results.", exRu:"Осязаемые результаты." },
+    { w:"undergo", ru:"претерпевать, проходить", ipa:"ˌʌndərˈgoʊ", exEn:"He will undergo surgery.", exRu:"Он перенесёт операцию." },
+    { w:"valid", ru:"действительный, обоснованный", ipa:"ˈvælɪd", exEn:"A valid argument.", exRu:"Обоснованный аргумент." },
+    { w:"viable", ru:"жизнеспособный", ipa:"ˈvaɪəbl", exEn:"A viable option.", exRu:"Жизнеспособный вариант." },
+    { w:"vulnerable", ru:"уязвимый", ipa:"ˈvʌlnərəbl", exEn:"Vulnerable groups need support.", exRu:"Уязвимым группам нужна поддержка." },
+  ];
 
-<script>
-  const BRANDS = {
-    neutral: { from: '#f8fafc', to: '#f5f5f4' },
-    aqua:    { from: '#f0f9ff', to: '#d1fae5' },
-    sunset:  { from: '#fff1f2', to: '#fde68a' },
-    violet:  { from: '#f5f3ff', to: '#fae8ff' },
+  const PHRASAL_VERBS = [
+    { w:"pick up", ru:"подобрать; подхватить; выучить на ходу", ipa:"pɪk ʌp", exEn:"I picked up some Spanish in Mexico.", exRu:"Я подхватил немного испанского в Мексике." },
+    { w:"look after", ru:"присматривать за", ipa:"lʊk ˈæftər", exEn:"Can you look after my dog?", exRu:"Присмотришь за моей собакой?" },
+    { w:"run into", ru:"столкнуться; встретить случайно", ipa:"rʌn ˈɪntuː", exEn:"I ran into an old friend.", exRu:"Я случайно встретил старого друга." },
+    { w:"set up", ru:"настроить; организовать", ipa:"sɛt ʌp", exEn:"We set up a new company.", exRu:"Мы основали новую компанию." },
+    { w:"figure out", ru:"понять, разобраться", ipa:"ˈfɪgjər aʊt", exEn:"I can’t figure it out.", exRu:"Я не могу в этом разобраться." },
+    { w:"get along", ru:"ладить", ipa:"gɛt əˈlɔːŋ", exEn:"They get along well.", exRu:"Они хорошо ладят." },
+    { w:"come across", ru:"наткнуться", ipa:"kʌm əˈkrɒs", exEn:"I came across an article.", exRu:"Я наткнулся на статью." },
+    { w:"carry on", ru:"продолжать", ipa:"ˈkæri ɒn", exEn:"Please carry on speaking.", exRu:"Пожалуйста, продолжайте говорить." },
+    { w:"point out", ru:"указывать, отмечать", ipa:"pɔɪnt aʊt", exEn:"He pointed out a mistake.", exRu:"Он указал на ошибку." },
+    { w:"turn out", ru:"оказаться", ipa:"tɜːrn aʊt", exEn:"It turned out to be true.", exRu:"Оказалось, что это правда." },
+    { w:"work out", ru:"разобраться; тренироваться", ipa:"wɜːrk aʊt", exEn:"We worked out a solution.", exRu:"Мы нашли решение." },
+    { w:"put off", ru:"откладывать", ipa:"pʊt ɒf", exEn:"Don’t put it off.", exRu:"Не откладывай это." },
+    { w:"bring up", ru:"поднимать тему; воспитывать", ipa:"brɪŋ ʌp", exEn:"She brought up a question.", exRu:"Она подняла вопрос." },
+    { w:"catch up", ru:"наверстать", ipa:"kæʧ ʌp", exEn:"I need to catch up on work.", exRu:"Мне нужно наверстать работу." },
+    { w:"find out", ru:"выяснить", ipa:"faɪnd aʊt", exEn:"We found out the truth.", exRu:"Мы выяснили правду." },
+    { w:"give up", ru:"сдаваться; бросать", ipa:"gɪv ʌp", exEn:"Never give up.", exRu:"Никогда не сдавайся." },
+    { w:"go on", ru:"продолжать", ipa:"goʊ ɒn", exEn:"Go on, I’m listening.", exRu:"Продолжай, я слушаю." },
+    { w:"hold on", ru:"подождать; держаться", ipa:"hoʊld ɒn", exEn:"Hold on a second.", exRu:"Подожди секунду." },
+    { w:"keep up", ru:"не отставать; поддерживать уровень", ipa:"kiːp ʌp", exEn:"Keep up the good work.", exRu:"Продолжай в том же духе." },
+    { w:"make up", ru:"выдумывать; мириться; составлять", ipa:"meɪk ʌp", exEn:"They made up after the fight.", exRu:"Они помирились после ссоры." },
+    { w:"take off", ru:"взлетать; снять (одежду)", ipa:"teɪk ɒf", exEn:"The plane took off on time.", exRu:"Самолёт взлетел вовремя." },
+    { w:"take over", ru:"перенимать руководство", ipa:"teɪk ˈoʊvər", exEn:"He took over the team.", exRu:"Он возглавил команду." },
+    { w:"turn up", ru:"появиться; прибавить (звук)", ipa:"tɜːrn ʌp", exEn:"She turned up late.", exRu:"Она появилась поздно." },
+    { w:"turn down", ru:"отклонить; убавить (звук)", ipa:"tɜːrn daʊn", exEn:"He turned down the offer.", exRu:"Он отклонил предложение." },
+    { w:"look forward to", ru:"с нетерпением ждать", ipa:"lʊk ˈfɔːrwərd tuː", exEn:"I look forward to meeting you.", exRu:"С нетерпением жду встречи." },
+    { w:"break down", ru:"сломаться; разложить по частям", ipa:"breɪk daʊn", exEn:"The car broke down.", exRu:"Машина сломалась." },
+    { w:"check out", ru:"проверить; выписаться", ipa:"ʧɛk aʊt", exEn:"Check out this video.", exRu:"Зацени это видео." },
+    { w:"come up with", ru:"придумать", ipa:"kʌm ʌp wɪð", exEn:"She came up with an idea.", exRu:"Она придумала идею." },
+    { w:"cut down on", ru:"сокращать (употребление)", ipa:"kʌt daʊn ɒn", exEn:"Cut down on sugar.", exRu:"Сократи сахар." },
+    { w:"drop by", ru:"зайти ненадолго", ipa:"drɒp baɪ", exEn:"Drop by my place later.", exRu:"Загляни ко мне позже." },
+    { w:"end up", ru:"в итоге оказаться", ipa:"ɛnd ʌp", exEn:"We ended up staying home.", exRu:"В итоге мы остались дома." },
+    { w:"get back to", ru:"перезвонить; вернуться к", ipa:"gɛt bæk tuː", exEn:"I’ll get back to you.", exRu:"Я свяжусь с тобой позже." },
+    { w:"get rid of", ru:"избавиться от", ipa:"gɛt rɪd ɒv", exEn:"Get rid of clutter.", exRu:"Избавься от хлама." },
+    { w:"go through", ru:"пройти через; просмотреть", ipa:"goʊ θruː", exEn:"Let’s go through the report.", exRu:"Давай посмотрим отчёт." },
+    { w:"look into", ru:"изучить, расследовать", ipa:"lʊk ˈɪntuː", exEn:"We’ll look into the issue.", exRu:"Мы изучим проблему." },
+    { w:"pay off", ru:"окупаться; расплатиться", ipa:"peɪ ɒf", exEn:"Hard work pays off.", exRu:"Труд окупается." },
+    { w:"put up with", ru:"терпеть, мириться", ipa:"pʊt ʌp wɪð", exEn:"I can’t put up with it.", exRu:"Я не могу с этим мириться." },
+    { w:"run out of", ru:"закончиться", ipa:"rʌn aʊt ɒv", exEn:"We ran out of time.", exRu:"У нас закончилось время." },
+    { w:"sort out", ru:"разобрать(ся), уладить", ipa:"sɔːrt aʊt", exEn:"We’ll sort it out.", exRu:"Мы с этим разберёмся." },
+  ];
+
+  // --------------------------- STORAGE KEYS ---------------------------
+  const KEY = {
+    WORDS_LEARNED: 'fc_words_learned_v1',
+    PHR_LEARNED: 'fc_phr_learned_v1',
   };
 
-  const MODES = {
-    relax: { label:'Relax', desc:'Warm pads, gentle delays, slow movement.', bpm:70, key:'C', oct:3, prog:[[0,9,5,7],[0,7,9,5]], scale:[0,2,5,7,9,12,14], amb:{rain:0.3,ocean:0.15,fire:0.0}, bg:'aqua' },
-    focus: { label:'Focus', desc:'Airy pads, steady ticks, minimal harmony.', bpm:86, key:'D', oct:3, prog:[[0,10,5,7],[0,7,10,5]], scale:[0,3,5,7,10,12,15], amb:{rain:0.15,ocean:0.1,fire:0.0}, bg:'neutral' },
-    sleep: { label:'Sleep', desc:'Deep drones, ultra‑soft highs, very slow.', bpm:52, key:'A', oct:2, prog:[[0,10,3,7]], scale:[0,2,3,7,10,12], amb:{rain:0.2,ocean:0.25,fire:0.12}, bg:'violet' },
-    activity:{ label:'Activity', desc:'Bright arps, light perc, energetic but smooth.', bpm:108, key:'E', oct:3, prog:[[0,9,7,5],[0,5,7,9]], scale:[0,2,4,7,9,12,14], amb:{rain:0.05,ocean:0.0,fire:0.0}, bg:'sunset' },
+  const state = {
+    voicesLoaded:false,
+    voices:[],
   };
 
-  const PITCHES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-  const clamp = (n,a,b)=>Math.min(b,Math.max(a,n));
-  const toNote = (key,oct,semi)=>{
-    const idx = (PITCHES.indexOf(key)+semi+1200)%12;
-    const midi = 12*(oct+1)+idx;
-    return Tone.Frequency(midi,'midi').toNote();
-  }
-
-  // ==== State ====
-  let state = {
-    mode:'focus',
-    playing:false,
-    intensity:40,
-    brand:'neutral',
-    gains:{ pad:0.7, arp:0.45, bass:0.4, perc:0.25 },
-    amb:{ rain:0.15, ocean:0.1, fire:0.0 },
-    minutes:0,
-    remainSec:0,
-  };
-
-  let nodes = {}; let started=false; let raf;
-
-  // ==== UI Bindings ====
-  const playBtn = document.getElementById('playBtn');
-  const modeChips = document.getElementById('modeChips');
-  const modeDesc = document.getElementById('modeDesc');
-  const intensity = document.getElementById('intensity');
-  const intensityVal = document.getElementById('intensityVal');
-  const minutesSel = document.getElementById('minutes');
-  const remain = document.getElementById('remain');
-  const brandChips = document.getElementById('brandChips');
-  const yearEl = document.getElementById('year');
-  yearEl.textContent = new Date().getFullYear();
-
-  const gainPad = document.getElementById('gainPad');
-  const gainArp = document.getElementById('gainArp');
-  const gainBass = document.getElementById('gainBass');
-  const gainPerc = document.getElementById('gainPerc');
-  const gainPadVal = document.getElementById('gainPadVal');
-  const gainArpVal = document.getElementById('gainArpVal');
-  const gainBassVal = document.getElementById('gainBassVal');
-  const gainPercVal = document.getElementById('gainPercVal');
-
-  const ambRain = document.getElementById('ambRain');
-  const ambOcean = document.getElementById('ambOcean');
-  const ambFire = document.getElementById('ambFire');
-
-  const savePresetBtn = document.getElementById('savePreset');
-  const loadPresetInput = document.getElementById('loadPreset');
-
-  const viz = document.getElementById('viz'); const vctx = viz.getContext('2d');
-
-  function updateBrand(){
-    const b = BRANDS[state.brand]||BRANDS.neutral;
-    document.documentElement.style.setProperty('--bg-from', b.from);
-    document.documentElement.style.setProperty('--bg-to', b.to);
-  }
-
-  function drawViz(){
-    vctx.clearRect(0,0,viz.width,viz.height);
-    const a = nodes.analyser; if(!a){ raf=requestAnimationFrame(drawViz); return; }
-    const vals = a.getValue();
-    const w = viz.width, h = viz.height, bars=vals.length, bw = w/bars;
-    for(let i=0;i<bars;i++){
-      const v = (vals[i]+140)/140; const bh = Math.max(1, v*h);
-      vctx.fillStyle='rgba(0,0,0,0.6)';
-      vctx.fillRect(i*bw, h-bh, bw*0.8, bh);
+  function loadVoices(){
+    function pick(){
+      const list = window.speechSynthesis?.getVoices?.() || [];
+      state.voices = list.filter(v=>/^en(-|_|$)/i.test(v.lang));
+      state.voicesLoaded = true;
     }
-    raf=requestAnimationFrame(drawViz);
-  }
-
-  // ==== Audio Engine ====
-  async function buildEngine(){
-    await Tone.start();
-    const cfg = MODES[state.mode];
-    Tone.Transport.bpm.value = cfg.bpm;
-
-    // Master chain
-    const preGain = new Tone.Gain(0.9);
-    const eq = new Tone.EQ3({ low:0, mid:-2.5, high:-1.5 });
-    const widener = new Tone.StereoWidener(0.35);
-    const multiband = new Tone.MultibandCompressor({ lowFrequency:200, highFrequency:3500, low:{threshold:-24,ratio:3}, mid:{threshold:-26,ratio:2.5}, high:{threshold:-28,ratio:2.2} });
-    const limiter = new Tone.Limiter(-1);
-    const master = new Tone.Gain(0.9).toDestination();
-    preGain.connect(eq).connect(widener).connect(multiband).connect(limiter).connect(master);
-
-    const analyser = new Tone.Analyser('fft',64); limiter.connect(analyser);
-
-    // FX
-    const bigRev = new Tone.Reverb({ decay:7, wet:0.35 });
-    const smallRev = new Tone.Reverb({ decay:3, wet:0.2 });
-    const delay = new Tone.FeedbackDelay({ delayTime:0.22, feedback:0.35, wet:0.2 });
-    const chorus = new Tone.Chorus(0.8, 1.5, 0.25).start();
-
-    // Pad layers
-    const padFilter = new Tone.Filter({ type:'lowpass', frequency:1600 + state.intensity*10, Q:0.7 });
-    const padLayer1 = new Tone.PolySynth(Tone.AMSynth,{ harmonicity:2, modulationIndex:1.5, oscillator:{type:'sine'}, envelope:{attack:1.8,decay:1.4,sustain:0.7,release:5}, modulation:{type:'triangle'}, modulationEnvelope:{attack:2,decay:1,sustain:0.6,release:4} });
-    const padLayer2 = new Tone.PolySynth(Tone.Synth,{ oscillator:{type:'sawtooth'}, envelope:{attack:2.2,decay:1.8,sustain:0.65,release:6} });
-    const padBus = new Tone.Gain(state.gains.pad).connect(preGain);
-    padLayer1.connect(chorus).connect(bigRev).connect(padFilter).connect(padBus);
-    padLayer2.connect(smallRev).connect(padFilter).connect(padBus);
-
-    // Arp
-    const arpSynth = new Tone.Synth({ oscillator:{type:'triangle8'}, envelope:{attack:0.01,decay:0.25,sustain:0.1,release:0.4} });
-    const arpFilter = new Tone.AutoFilter({ frequency:0.08, baseFrequency:1200, octaves:1, type:'sine' }).start();
-    const arpBus = new Tone.Gain(state.gains.arp).connect(preGain);
-    arpSynth.connect(delay).connect(arpFilter).connect(arpBus);
-
-    // Bass
-    const bass = new Tone.MonoSynth({ oscillator:{type:'triangle'}, filter:{Q:1,type:'lowpass',rolloff:-24}, filterEnvelope:{attack:0.03,decay:0.2,sustain:0.2,release:0.4,baseFrequency:60,octaves:3}, envelope:{attack:0.01,decay:0.2,sustain:0.3,release:0.5} });
-    const bassBus = new Tone.Gain(state.gains.bass).connect(preGain);
-    bass.connect(bassBus);
-
-    // Perc
-    const tick = new Tone.MembraneSynth({ octaves:2, pitchDecay:0.008, envelope:{attack:0.001,decay:0.08,sustain:0} });
-    const noise = new Tone.Noise('pink');
-    const noiseEnv = new Tone.AmplitudeEnvelope({ attack:0.001,decay:0.12,sustain:0,release:0.03 });
-    const noiseHP = new Tone.Filter({ type:'highpass', frequency:4000 });
-    const percBus = new Tone.Gain(state.gains.perc).connect(preGain);
-    tick.connect(percBus); noise.connect(noiseHP).connect(noiseEnv).connect(percBus);
-
-    // Ambience
-    const makeAmb = (type, baseFreq, modFreq) => {
-      const n = new Tone.Noise('pink');
-      const f = new Tone.Filter({ type, frequency:baseFreq, Q: type==='bandpass'?1.2:0.7 });
-      const g = new Tone.Gain(0); const lfo = new Tone.LFO(modFreq, 0.25, 1).start();
-      lfo.connect(g.gain); n.connect(f).connect(g).connect(preGain); return { n,g,f };
+    if('speechSynthesis' in window){
+      pick();
+      window.speechSynthesis.onvoiceschanged = pick;
     }
-    const rain = makeAmb('lowpass', 3800, 0.05);
-    const ocean = makeAmb('lowpass', 1200, 0.03);
-    const fire = makeAmb('bandpass', 2500, 0.4);
-    rain.g.gain.value = state.amb.rain; ocean.g.gain.value = state.amb.ocean; fire.g.gain.value = state.amb.fire;
-
-    // Musical logic
-    const scale = MODES[state.mode].scale; const key = MODES[state.mode].key; const oct = MODES[state.mode].oct;
-    const density = clamp(0.15 + state.intensity*0.006, 0.15, 0.95);
-    let prog = MODES[state.mode].prog[Math.floor(Math.random()*MODES[state.mode].prog.length)]; let progStep=0;
-    const triad = (deg)=>{ const third = scale[(scale.indexOf(0)+2)%scale.length]-0; const fifth = scale[(scale.indexOf(0)+4)%scale.length]-0; return [deg, deg+third, deg+fifth]; };
-
-    const padLoop = new Tone.Loop((time)=>{
-      const deg = prog[progStep % prog.length]; const chord = triad(deg).map((s,i)=>toNote(key, oct+(i===0?0:1), s));
-      padLayer1.triggerAttackRelease(chord, '1m', time+0.01);
-      padLayer2.triggerAttackRelease(chord.map(n=>Tone.Frequency(n).transpose(12)), '1m', time+0.02);
-      progStep++;
-    }, '1m');
-
-    const arpSeq = new Tone.Sequence((time)=>{
-      if (Math.random() < density){ const off = scale[Math.floor(Math.random()*scale.length)] + (Math.random()<0.25?12:0); const note = toNote(key, oct+1, off); const t=time + (Math.random()-0.5)*0.02; arpSynth.triggerAttackRelease(note, '8n', t);} }, new Array(16).fill(0), '8n');
-
-    const bassLoop = new Tone.Loop((time)=>{ const deg = prog[(progStep+3)%prog.length]; const note = toNote(key, oct-1, deg); bass.triggerAttackRelease(note, '2n', time); }, '2n');
-
-    const percLoop = new Tone.Loop((time)=>{ if (state.mode==='sleep' && Math.random()<0.6) return; tick.triggerAttackRelease('G1','32n',time); if (Math.random() < (state.mode==='activity'?0.9:0.6)){ const t=time+(Math.random()*0.2-0.1); noiseEnv.triggerAttackRelease(0.08,t);} }, '4n');
-
-    rain.n.start(); ocean.n.start(); fire.n.start();
-    if (!started){ Tone.Transport.start(); started=true; }
-    padLoop.start(0); arpSeq.start(0); bassLoop.start(0); percLoop.start(0);
-
-    nodes = { preGain, eq, widener, multiband, limiter, master, analyser, bigRev, smallRev, delay, chorus,
-              padLayer1, padLayer2, padFilter, padBus, arpSynth, arpFilter, arpBus, bass, bassBus,
-              tick, noise, noiseEnv, noiseHP, percBus, rain, ocean, fire, padLoop, arpSeq, bassLoop, percLoop };
   }
 
-  function teardown(){
-    try{ nodes.padLoop?.stop(); nodes.arpSeq?.stop(); nodes.bassLoop?.stop(); nodes.percLoop?.stop(); }catch{}
-    try{ nodes.rain?.n?.stop(); nodes.ocean?.n?.stop(); nodes.fire?.n?.stop(); }catch{}
-    for (const k in nodes){ try{ nodes[k]?.dispose?.(); }catch{} }
-    nodes = {};
+  // Utils
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => Array.from(document.querySelectorAll(sel));
+  const shuffle = arr => arr.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
+  const uniqBy = (arr, keyFn) => Array.from(new Map(arr.map(x=>[keyFn(x), x])).values());
+
+  const store = {
+    get(key, def){ try{ return JSON.parse(localStorage.getItem(key)) ?? def }catch{ return def } },
+    set(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
   }
 
-  function updateRealtime(){
-    if (!nodes.padFilter) return;
-    nodes.padFilter.frequency.rampTo(1200 + state.intensity*12, 0.5);
-    nodes.padBus?.gain.rampTo(state.gains.pad, 0.2);
-    nodes.arpBus?.gain.rampTo(state.gains.arp, 0.2);
-    nodes.bassBus?.gain.rampTo(state.gains.bass, 0.2);
-    nodes.percBus?.gain.rampTo(state.gains.perc, 0.2);
-    nodes.rain?.g?.gain.rampTo(state.amb.rain, 0.2);
-    nodes.ocean?.g?.gain.rampTo(state.amb.ocean, 0.2);
-    nodes.fire?.g?.gain.rampTo(state.amb.fire, 0.2);
+  function ttsSpeak(text){
+    if(!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = state.voices.find(v=>/US|UK|GB/i.test(v.name)) || state.voices[0];
+    if(v) u.voice = v;
+    u.rate = 0.96; u.pitch = 1.0; u.lang = 'en-US';
+    window.speechSynthesis.speak(u);
   }
 
-  // ==== Timer ====
-  let timerId=null; function startTimer(){ if (state.minutes===0) { remain.style.display='none'; return; } const end = Date.now()+state.minutes*60*1000; remain.style.display='block';
-    timerId = setInterval(()=>{ const left = Math.max(0, Math.round((end-Date.now())/1000)); state.remainSec=left; const m=Math.floor(left/60), s=String(left%60).padStart(2,'0'); remain.textContent = `Remaining: ${m}:${s}`; if (left<=0){ clearInterval(timerId); timerId=null; togglePlay(false);} }, 500);
+  // ---------------- LEARNING ENGINE (repeat after 5, active 10) ----------------
+  class Trainer{
+    constructor(items, storageKey){
+      this.itemsAll = items; // [{w,ru,ipa,exEn,exRu}]
+      this.key = storageKey;
+      this.learned = new Set(store.get(storageKey, [])); // store by w
+      this.resetRuntime();
+    }
+    resetRuntime(){
+      const notLearned = this.itemsAll.filter(x=>!this.learned.has(x.w));
+      this.backlog = shuffle(notLearned.slice(0));
+      this.active = [];
+      while(this.active.length < 10 && this.backlog.length){ this.active.push(this.backlog.shift()); }
+      this.queue = shuffle(this.active.slice(0));
+      this.cursor = 0;
+      this.ensureQueue();
+    }
+    ensureQueue(){
+      // Keep some items ahead to prevent empty
+      if(this.queue.length < 8){
+        const need = Math.max(8 - this.queue.length, 0);
+        for(let i=0;i<need;i++){
+          const pick = this.active[Math.floor(Math.random()*this.active.length)];
+          if(pick) this.queue.push(pick);
+        }
+      }
+    }
+    getCounts(){
+      return { total:this.itemsAll.length, learned:this.learned.size, active:this.active.length, remaining:this.itemsAll.length - this.learned.size };
+    }
+    next(){
+      if(!this.queue.length){
+        if(!this.active.length && !this.backlog.length) return null; // finished
+        this.ensureQueue();
+      }
+      const item = this.queue.shift();
+      return item || null;
+    }
+    pushBack5(item){
+      // schedule to reappear after ~5 other cards
+      const pos = Math.min(5, this.queue.length);
+      this.queue.splice(pos, 0, item);
+    }
+    markLearned(w){
+      if(this.learned.has(w)) return;
+      this.learned.add(w);
+      // remove any future duplicates of this item from queue
+      this.queue = this.queue.filter(it=>it.w!==w);
+      // remove from active
+      this.active = this.active.filter(it=>it.w!==w);
+      // refill active from backlog to keep 10
+      while(this.active.length < 10 && this.backlog.length){ this.active.push(this.backlog.shift()); }
+      // after changing pools, keep queue healthy
+      if(this.queue.length < 5){ this.queue = this.queue.concat(shuffle(this.active)); }
+      store.set(this.key, Array.from(this.learned));
+    }
+    getLearnedItems(){
+      return this.itemsAll.filter(x=>this.learned.has(x.w));
+    }
   }
-  function stopTimer(){ if (timerId){ clearInterval(timerId); timerId=null; } remain.style.display='none'; }
 
-  // ==== UI setup ====
-  function renderModes(){
-    modeChips.innerHTML=''; Object.entries(MODES).forEach(([k,v])=>{
-      const b=document.createElement('button'); b.className='chip'+(state.mode===k?' active':''); b.textContent=v.label; b.onclick=()=>{ state.mode=k; modeDesc.textContent=v.desc; document.getElementById('ambRain').value=v.amb.rain; document.getElementById('ambOcean').value=v.amb.ocean; document.getElementById('ambFire').value=v.amb.fire; state.amb={...v.amb}; updateBrand(); if(state.playing){ teardown(); buildEngine(); } };
-      modeChips.appendChild(b);
+  // ---------------- RENDER LISTS ----------------
+  function renderList(container, items){
+    container.innerHTML = items.map(x=>`
+      <div class="row">
+        <div class="w">${x.w}</div>
+        <div class="t">${x.ru}</div>
+        <div class="t" style="margin-top:6px;opacity:.8">/${x.ipa}/</div>
+      </div>
+    `).join('');
+  }
+
+  // ---------------- APP LOGIC ----------------
+  let wordsTrainer, phrTrainer, currentWord, currentPhr;
+
+  function nav(id){
+    $$('.screen').forEach(s=>s.classList.remove('active'));
+    $('#'+id).classList.add('active');
+    $('#menuPanel').classList.remove('open');
+    if(id==='wordsList') updateWordsList();
+    if(id==='phrasalsList') updatePhrList();
+    if(id==='learnWords') showNextWord();
+    if(id==='learnPhrasals') showNextPhr();
+    if(id==='learned') renderLearned();
+  }
+
+  function updateWordsList(){
+    const list = WORDS_ADVANCED;
+    $('#wordsCount').textContent = `Всего слов: ${list.length}`;
+    renderList($('#wordsListContainer'), list);
+  }
+  function updatePhrList(){
+    const list = PHRASAL_VERBS;
+    $('#phrasalsCount').textContent = `Всего фразовых: ${list.length}`;
+    renderList($('#phrListContainer'), list);
+  }
+
+  function refreshBadges(){
+    const c1 = wordsTrainer.getCounts();
+    $('#wordsProgress').textContent = `Выучено: ${c1.learned} / ${c1.total}`;
+    $('#activeBadge').textContent = `Активная 10-кa: ${Math.min(c1.active,10)}/10`;
+
+    const c2 = phrTrainer.getCounts();
+    $('#phrProgress').textContent = `Выучено: ${c2.learned} / ${c2.total}`;
+    $('#activeBadgePhr').textContent = `Активная 10-кa: ${Math.min(c2.active,10)}/10`;
+  }
+
+  function bindWordToCard(x){
+    $('#wordText').textContent = x?.w || '—';
+    $('#wordRu').textContent = x?.ru || '—';
+    $('#wordIpa span').textContent = x?.ipa || '';
+    $('#wordExEn').textContent = x?.exEn || '';
+    $('#wordExRu').textContent = x?.exRu || '';
+  }
+  function bindPhrToCard(x){
+    $('#phrText').textContent = x?.w || '—';
+    $('#phrRu').textContent = x?.ru || '—';
+    $('#phrIpa span').textContent = x?.ipa || '';
+    $('#phrExEn').textContent = x?.exEn || '';
+    $('#phrExRu').textContent = x?.exRu || '';
+  }
+
+  function showNextWord(){
+    refreshBadges();
+    currentWord = wordsTrainer.next();
+    if(!currentWord){
+      $('#wordCard').innerHTML = `<div class="empty">Все слова изучены! 🎉 Перейдите к фразовым глаголам или сбросьте прогресс.</div>`;
+      return;
+    }
+    bindWordToCard(currentWord);
+  }
+  function showNextPhr(){
+    refreshBadges();
+    currentPhr = phrTrainer.next();
+    if(!currentPhr){
+      $('#phrCard').innerHTML = `<div class="empty">Все фразовые глаголы изучены! 🎉</div>`;
+      return;
+    }
+    bindPhrToCard(currentPhr);
+  }
+
+  function renderLearned(){
+    const a = wordsTrainer.getLearnedItems().map(x=>({...x, type:'слово'}));
+    const b = phrTrainer.getLearnedItems().map(x=>({...x, type:'фразовый глагол'}));
+    const list = a.concat(b);
+    $('#learnedCount').textContent = `Выучено всего: ${list.length}`;
+    if(!list.length){ $('#learnedEmpty').style.display='block'; $('#learnedContainer').innerHTML=''; return; }
+    $('#learnedEmpty').style.display='none';
+    renderList($('#learnedContainer'), list);
+  }
+
+  // ---------------- EVENTS ----------------
+  window.addEventListener('DOMContentLoaded', () => {
+    loadVoices();
+
+    wordsTrainer = new Trainer(WORDS_ADVANCED, KEY.WORDS_LEARNED);
+    phrTrainer = new Trainer(PHRASAL_VERBS, KEY.PHR_LEARNED);
+    updateWordsList();
+    updatePhrList();
+    refreshBadges();
+
+    // Menu
+    $('#menuBtn').addEventListener('click', ()=> $('#menuPanel').classList.toggle('open'));
+    $$('#menuPanel [data-nav]').forEach(el=> el.addEventListener('click', e=> nav(e.currentTarget.getAttribute('data-nav'))));
+    $$('.tile .actions .btn, .hero .tile .btn').forEach(el=> el.addEventListener('click', e=> nav(e.currentTarget.getAttribute('data-nav'))));
+
+    // Search
+    $('#searchWords').addEventListener('input', (e)=>{
+      const q = e.target.value.toLowerCase();
+      const items = WORDS_ADVANCED.filter(x=> x.w.toLowerCase().includes(q) || x.ru.toLowerCase().includes(q) );
+      renderList($('#wordsListContainer'), items);
     });
-    modeDesc.textContent = MODES[state.mode].desc;
-  }
-  function renderBrands(){
-    brandChips.innerHTML=''; Object.keys(BRANDS).forEach((k)=>{ const b=document.createElement('button'); b.className='chip'+(state.brand===k?' active':''); b.textContent=k; b.onclick=()=>{ state.brand=k; updateBrand(); }; brandChips.appendChild(b); });
-  }
+    $('#searchPhr').addEventListener('input', (e)=>{
+      const q = e.target.value.toLowerCase();
+      const items = PHRASAL_VERBS.filter(x=> x.w.toLowerCase().includes(q) || x.ru.toLowerCase().includes(q) );
+      renderList($('#phrListContainer'), items);
+    });
 
-  // ==== Events ====
-  playBtn.onclick = async ()=>{ togglePlay(!state.playing) };
-  function setPlayUI(){ playBtn.textContent = state.playing? 'Pause':'Play'; }
-  async function togglePlay(next){ if (next){ await buildEngine(); drawViz(); startTimer(); } else { stopTimer(); teardown(); cancelAnimationFrame(raf); } state.playing=next; setPlayUI(); }
+    // Learn Words controls
+    $('#checkWord').addEventListener('click', ()=>{ wordsTrainer.markLearned(currentWord.w); showNextWord(); });
+    $('#skip5').addEventListener('click', ()=>{ wordsTrainer.pushBack5(currentWord); showNextWord(); });
+    $('#dontKnow').addEventListener('click', ()=>{ wordsTrainer.pushBack5(currentWord); showNextWord(); });
+    $('#wordIpa').addEventListener('click', ()=> ttsSpeak(currentWord?.w || ''));
 
-  intensity.oninput = ()=>{ state.intensity = parseInt(intensity.value); intensityVal.textContent = state.intensity; updateRealtime(); }
-  minutesSel.onchange = ()=>{ state.minutes=parseInt(minutesSel.value); if(state.playing){ stopTimer(); startTimer(); } }
+    // Learn Phrasals controls
+    $('#checkPhr').addEventListener('click', ()=>{ phrTrainer.markLearned(currentPhr.w); showNextPhr(); });
+    $('#skip5Phr').addEventListener('click', ()=>{ phrTrainer.pushBack5(currentPhr); showNextPhr(); });
+    $('#dontKnowPhr').addEventListener('click', ()=>{ phrTrainer.pushBack5(currentPhr); showNextPhr(); });
+    $('#phrIpa').addEventListener('click', ()=> ttsSpeak(currentPhr?.w || ''));
 
-  function bindRange(el, key, label){ el.oninput = ()=>{ state.gains[key]=parseFloat(el.value); document.getElementById(label).textContent = Math.round(state.gains[key]*100)+'%'; updateRealtime(); } }
-  bindRange(gainPad,'pad','gainPadVal'); bindRange(gainArp,'arp','gainArpVal'); bindRange(gainBass,'bass','gainBassVal'); bindRange(gainPerc,'perc','gainPercVal');
+    // Export learned
+    $('#exportBtn').addEventListener('click', ()=>{
+      const data = {
+        words: store.get(KEY.WORDS_LEARNED, []),
+        phrasals: store.get(KEY.PHR_LEARNED, []),
+        timestamp: new Date().toISOString(),
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'learned_flashcards.json'; a.click();
+      URL.revokeObjectURL(url);
+    });
 
-  ambRain.oninput=()=>{ state.amb.rain=parseFloat(ambRain.value); updateRealtime(); }
-  ambOcean.oninput=()=>{ state.amb.ocean=parseFloat(ambOcean.value); updateRealtime(); }
-  ambFire.oninput=()=>{ state.amb.fire=parseFloat(ambFire.value); updateRealtime(); }
-
-  savePresetBtn.onclick=()=>{ const data = { mode:state.mode,intensity:state.intensity,gains:state.gains,amb:state.amb,minutes:state.minutes }; const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`flowsound_${state.mode}.json`; a.click(); URL.revokeObjectURL(url); }
-  loadPresetInput.onchange=(e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d.mode){ state.mode=d.mode; } if(d.intensity!=null){ state.intensity=d.intensity; intensity.value=d.intensity; intensityVal.textContent=d.intensity; } if(d.gains){ state.gains=d.gains; gainPad.value=d.gains.pad; gainPadVal.textContent=Math.round(d.gains.pad*100)+'%'; gainArp.value=d.gains.arp; gainArpVal.textContent=Math.round(d.gains.arp*100)+'%'; gainBass.value=d.gains.bass; gainBassVal.textContent=Math.round(d.gains.bass*100)+'%'; gainPerc.value=d.gains.perc; gainPercVal.textContent=Math.round(d.gains.perc*100)+'%'; } if(d.amb){ state.amb=d.amb; ambRain.value=d.amb.rain; ambOcean.value=d.amb.ocean; ambFire.value=d.amb.fire; } if(d.minutes!=null){ state.minutes=d.minutes; minutesSel.value=d.minutes; } renderModes(); updateBrand(); if(state.playing){ teardown(); buildEngine(); } else { updateRealtime(); } } catch{ alert('Invalid preset'); } }; r.readAsText(f); }
-
-  // Init
-  updateBrand(); renderModes(); renderBrands(); drawViz();
-</script>
+    // Reset
+    $('#resetAll').addEventListener('click', ()=>{
+      if(confirm('Сбросить весь прогресс?')){
+        localStorage.removeItem(KEY.WORDS_LEARNED);
+        localStorage.removeItem(KEY.PHR_LEARNED);
+        wordsTrainer = new Trainer(WORDS_ADVANCED, KEY.WORDS_LEARNED);
+        phrTrainer = new Trainer(PHRASAL_VERBS, KEY.PHR_LEARNED);
+        updateWordsList(); updatePhrList(); refreshBadges();
+        alert('Готово. Прогресс сброшен.');
+      }
+    });
+  });
+  </script>
 </body>
 </html>

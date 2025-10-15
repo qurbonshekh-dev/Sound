@@ -1,471 +1,277 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { PieChart, Pie, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Мой Бюджет</title>
+  <meta name="theme-color" content="#111827" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <style>
+    :root{--fg:#0f172a;--muted:#64748b;--card:rgba(255,255,255,.72);--accent:#6d28d9}
+    *{box-sizing:border-box}html,body{height:100%}
+    body{margin:0;font:16px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,system-ui,sans-serif;color:var(--fg);background:linear-gradient(#f7fafc,#eef2f7)}
+    .container{max-width:960px;margin:0 auto;padding:24px}
+    .header{display:flex;gap:12px;align-items:center;margin-bottom:16px}
+    .logo{display:grid;place-items:center;width:40px;height:40px;border-radius:16px;background:var(--card);backdrop-filter:saturate(180%) blur(16px);border:1px solid #ffffffb3;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+    .title{margin:0;font-weight:700;font-size:28px}
+    .subtitle{margin:2px 0 0;color:var(--muted);font-size:13px}
+    .seg{display:inline-flex;gap:4px;background:var(--card);border:1px solid #ffffffb3;padding:6px;border-radius:16px;backdrop-filter:saturate(180%) blur(16px);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+    .seg button{border:0;background:transparent;padding:8px 12px;border-radius:12px;font-size:14px}
+    .seg button.active{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .btn{padding:10px 14px;border-radius:14px;border:1px solid #e5e7eb;background:#fff;cursor:pointer}
+    .btn.primary{background:#0f172a;color:#fff;border-color:#0f172a}
+    .card{background:var(--card);border:1px solid #ffffffb3;border-radius:24px;padding:20px;backdrop-filter:saturate(180%) blur(16px);box-shadow:0 6px 24px rgba(15,23,42,.06)}
+    label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+    input,select{width:100%;padding:12px 14px;border-radius:14px;border:1px solid #e5e7eb;background:#ffffffb8}
+    .grid{display:grid;gap:12px}
+    @media(min-width:640px){.grid-2{grid-template-columns:repeat(2,1fr)}}
+    .pill{display:flex;align-items:center;gap:8px;justify-content:flex-start;width:100%;padding:12px 14px;border-radius:16px;border:1px solid #e5e7eb;background:#fff;cursor:pointer}
+    .pill.active{background:#111827;color:#fff;border-color:#111827}
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{padding:10px 12px;border-top:1px solid #eef2f7;font-size:14px}
+    .muted{color:var(--muted)}
+    .row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">💰</div>
+      <div>
+        <h1 class="title">Мой Бюджет</h1>
+        <p class="subtitle">Учёт личных расходов — офлайн, локально, как PWA</p>
+      </div>
+    </header>
 
-// ===== Helpers
-// NOTE: STORAGE_KEY is kept for legacy migration from localStorage → IndexedDB
-const STORAGE_KEY = "expense-tracker-v1";
-const DEFAULT_CATEGORIES = [
-  "Еда",
-  "Транспорт",
-  "Развлечения",
-  "Здоровье",
-  "Покупки",
-  "Связь",
-  "Подписки",
-  "Дом",
-  "Одежда",
-  "Другое",
-];
+    <div class="seg" id="seg">
+      <button data-tab="add" class="active">Добавить</button>
+      <button data-tab="list">Список</button>
+      <button data-tab="report">Отчёт</button>
+    </div>
 
-const CATEGORY_UI = {
-  "Еда": { emoji: "🍔", color: "bg-orange-500 text-white", idle: "bg-white/80 hover:bg-white" },
-  "Транспорт": { emoji: "🚗", color: "bg-sky-500 text-white", idle: "bg-white/80 hover:bg-white" },
-  "Развлечения": { emoji: "🎮", color: "bg-violet-500 text-white", idle: "bg-white/80 hover:bg-white" },
-  "Здоровье": { emoji: "💊", color: "bg-emerald-500 text-white", idle: "bg-white/80 hover:bg-white" },
-  "Покупки": { emoji: "🛍️", color: "bg-pink-500 text-white", idle: "bg-white/80 hover:bg-white" },
-  "Связь": { emoji: "📶", color: "bg-indigo-500 text-white", idle: "bg-white/80 hover:bg-white" },
-  "Подписки": { emoji: "🔁", color: "bg-blue-500 text-white", idle: "bg-white/80 hover:bg-white" },
-  "Дом": { emoji: "🏠", color: "bg-teal-500 text-white", idle: "bg-white/80 hover:bg-white" },
-  "Одежда": { emoji: "👕", color: "bg-amber-500 text-white", idle: "bg-white/80 hover:bg-white" },
-  "Другое": { emoji: "📦", color: "bg-slate-500 text-white", idle: "bg-white/80 hover:bg-white" },
-};
-
-function uid() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-function formatNumber(n, currencySymbol) {
-  const num = Number(n || 0);
-  return `${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencySymbol}`;
-}
-
-function parseAmount(v) {
-  if (typeof v === "number") return v;
-  if (!v) return 0;
-  const normalized = String(v).replace(/,/g, ".");
-  const n = Number(normalized);
-  return isNaN(n) ? 0 : n;
-}
-
-// ===== CSV helpers
-function toCSV(rows) {
-  if (!rows?.length) return "";
-  const header = ["id", "date", "amount", "category", "note"];
-  const escapeCell = (c) => `"${String(c ?? "").replace(/"/g, '""')}"`;
-  const lines = [header.map(escapeCell).join(",")];
-  for (const r of rows) {
-    lines.push(header.map((h) => escapeCell(r[h])).join(","));
-  }
-  // IMPORTANT: keep this on one line with a properly closed string
-  return lines.join("
-");
-}
-
-// ===== IndexedDB storage (no dependencies)
-const DB_NAME = 'budget-db';
-const STORE_NAME = 'kv';
-const STATE_KEY = 'state';
-
-function idbOpen() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-async function idbGet() {
-  const db = await idbOpen();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.get(STATE_KEY);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-async function idbSet(val) {
-  const db = await idbOpen();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.put(val, STATE_KEY);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function download(filename, text) {(filename, text) {
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-// ===== Main App (Apple‑like visual) // PWA-ready: see sw.js + manifest.json below
-export default function ExpenseApp() {
-  const [activeTab, setActiveTab] = useState("add"); // add | list | report
-
-  const [expenses, setExpenses] = useState([]);
-  const [currency, setCurrency] = useState("сомони");
-  const [filters, setFilters] = useState({ month: "", year: "", category: "" });
-
-  // Form state
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [amount, setAmount] = useState(0);
-  const [category, setCategory] = useState("");
-  const [note, setNote] = useState("");
-  const [customCategory, setCustomCategory] = useState("");
-
-  const fileInputRef = useRef(null);
-
-  // Load/Save
-  useEffect(() => {
-    (async () => {
-      try {
-        // 1) Try load from IndexedDB
-        const loaded = await idbGet();
-        if (loaded) {
-          if (Array.isArray(loaded.expenses)) setExpenses(loaded.expenses);
-          if (loaded.currency) setCurrency(loaded.currency);
-        } else {
-          // 2) Migrate from legacy localStorage if exists
-          try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed.expenses)) setExpenses(parsed.expenses);
-              if (parsed.currency) setCurrency(parsed.currency);
-              await idbSet({ expenses: parsed.expenses || [], currency: parsed.currency || "сомони" });
-            }
-          } catch (e) {
-            console.warn('Legacy localStorage parse failed', e);
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load from IndexedDB', e);
-      }
-      // PWA: register service worker if present
-      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch((err) => console.warn('SW register fail', err));
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        await idbSet({ expenses, currency });
-      } catch (e) {
-        console.error('Failed to save to IndexedDB', e);
-      }
-    })();
-  }, [expenses, currency]);
-
-  // Derived lists
-  const categories = useMemo(() => {
-    const expCats = new Set(expenses.map((e) => (e.category || "").trim()).filter(Boolean));
-    const all = new Set([...DEFAULT_CATEGORIES, ...Array.from(expCats)]);
-    return Array.from(all).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-  }, [expenses]);
-
-  const years = useMemo(() => {
-    const set = new Set(expenses.map((e) => (e.date || "").slice(0, 4)).filter(Boolean));
-    return Array.from(set).sort();
-  }, [expenses]);
-
-  const months = [
-    ["01", "Январь"], ["02", "Февраль"], ["03", "Март"], ["04", "Апрель"], ["05", "Май"], ["06", "Июнь"],
-    ["07", "Июль"], ["08", "Август"], ["09", "Сентябрь"], ["10", "Октябрь"], ["11", "Ноябрь"], ["12", "Декабрь"],
-  ];
-
-  const filtered = useMemo(() => {
-    return expenses.filter((e) => {
-      const y = e.date?.slice(0, 4);
-      const m = e.date?.slice(5, 7);
-      if (filters.year && y !== filters.year) return false;
-      if (filters.month && m !== filters.month) return false;
-      if (filters.category && (e.category || "") !== filters.category) return false;
-      return true;
-    });
-  }, [expenses, filters]);
-
-  const totals = useMemo(() => {
-    const sum = filtered.reduce((acc, e) => acc + parseAmount(e.amount), 0);
-    const byCategory = {};
-    for (const e of filtered) {
-      const key = (e.category || "Без категории").trim() || "Без категории";
-      byCategory[key] = (byCategory[key] || 0) + parseAmount(e.amount);
-    }
-    const byMonth = {};
-    for (const e of filtered) {
-      const ym = (e.date || "").slice(0, 7);
-      if (!ym) continue;
-      byMonth[ym] = (byMonth[ym] || 0) + parseAmount(e.amount);
-    }
-    return { sum, byCategory, byMonth };
-  }, [filtered]);
-
-  const pieData = useMemo(() => Object.entries(totals.byCategory).map(([name, value]) => ({ name, value: Number(value.toFixed(2)) })), [totals]);
-  const barData = useMemo(() => Object.entries(totals.byMonth).sort(([a],[b])=>a.localeCompare(b)).map(([ym,value])=>({ name: ym, total: Number(value.toFixed(2)) })), [totals]);
-
-  // Actions
-  function addExpense(e) {
-    e?.preventDefault?.();
-    if (!date || !amount) return;
-    const cat = (category === "Другое" ? customCategory : category) || "";
-    const item = { id: uid(), date, amount: parseAmount(amount), category: cat.trim(), note: note.trim() };
-    setExpenses((prev) => [item, ...prev]);
-    setAmount(0); setNote(""); setCustomCategory("");
-  }
-  function removeExpense(id) { setExpenses((prev) => prev.filter((x) => x !== id)); }
-  function clearAll() { if (confirm("Удалить ВСЕ расходы? Это действие нельзя отменить.")) setExpenses([]); }
-  function exportJSON() { const payload = JSON.stringify({ currency, expenses }, null, 2); download(`expenses-backup-${new Date().toISOString().slice(0,10)}.json`, payload); }
-  function importJSON(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try { const obj = JSON.parse(reader.result); if (Array.isArray(obj.expenses)) setExpenses(obj.expenses); if (obj.currency) setCurrency(obj.currency); alert("Импорт завершён"); }
-      catch { alert("Ошибка импорта: неверный файл"); }
-    }; reader.readAsText(file);
-  }
-  function exportCSV() { const csv = toCSV(filtered); download(`expenses-${new Date().toISOString().slice(0,10)}.csv`, csv); }
-
-  // ===== UI (glass / Apple‑like)
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200 text-slate-900 p-6">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <header className="mb-6">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/60 grid place-items-center shadow-sm">💰</div>
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight">Мой Бюджет</h1>
-              <p className="text-sm text-slate-600">Учёт личных расходов. Данные локально в браузере.</p>
-            </div>
-          </div>
-
-          {/* Segmented control */}
-          <div className="mt-4 inline-flex rounded-2xl border border-white/60 bg-white/60 backdrop-blur-xl p-1 shadow-sm">
-            {[
-              { key: "add", label: "Добавить" },
-              { key: "list", label: "Список" },
-              { key: "report", label: "Отчёт" },
-            ].map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                className={`px-4 py-2 rounded-xl text-sm transition ${activeTab===t.key?"bg-white shadow-sm":"hover:bg-white/70"}`}
-              >{t.label}</button>
-            ))}
-          </div>
-
-          {/* Actions */}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button className="px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-slate-800" onClick={exportCSV}>Скачать CSV</button>
-            <button className="px-4 py-2 rounded-2xl border border-white/60 bg-white/60 backdrop-blur-xl hover:bg-white" onClick={exportJSON}>Экспорт JSON</button>
-            <button className="px-4 py-2 rounded-2xl border border-white/60 bg-white/60 backdrop-blur-xl hover:bg-white" onClick={() => fileInputRef.current?.click()}>Импорт JSON</button>
-            <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={(e)=>{const f=e.target.files?.[0]; if(f) importJSON(f); e.currentTarget.value="";}} />
-          </div>
-        </header>
-
-        <div className="grid grid-cols-1 gap-6">
-          {/* ADD TAB */}
-          {activeTab === "add" && (
-            <section className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold mb-4">Добавить расход</h2>
-              <form className="space-y-4" onSubmit={addExpense}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-slate-600 mb-1">Сумма ({currency})</label>
-                    <input type="text" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e)=>setAmount(e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" required />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-slate-600 mb-1">Дата</label>
-                    <input type="date" value={date} onChange={(e)=>setDate(e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" required />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm text-slate-600 mb-2">Категория</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {categories.map((c) => {
-                      const ui = CATEGORY_UI[c] || { emoji: "🏷️", color: "bg-slate-900 text-white", idle: "bg-white/80 hover:bg-white" };
-                      const selected = category === c;
-                      return (
-                        <button
-                          type="button"
-                          key={c}
-                          onClick={() => setCategory(c)}
-                          className={`group relative w-full rounded-2xl px-4 py-3 text-left ring-1 ring-black/5 shadow-sm transition ${selected ? ui.color : ui.idle}`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="text-xl">{ui.emoji}</span>
-                            <span className={`font-medium ${selected?"opacity-100":"opacity-80"}`}>{c}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {category === "Другое" && (
-                    <input type="text" placeholder="Своя категория" value={customCategory} onChange={(e)=>setCustomCategory(e.target.value)} className="mt-3 w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" />
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm text-slate-600 mb-1">Описание (необязательно)</label>
-                  <input type="text" placeholder="Например: обед в кафе" value={note} onChange={(e)=>setNote(e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" />
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <button type="submit" className="px-5 py-3 rounded-2xl bg-violet-600 text-white hover:bg-violet-500 shadow-sm">Добавить расход</button>
-                  <button type="button" className="text-sm text-red-600 hover:underline" onClick={clearAll}>Очистить всё</button>
-                </div>
-              </form>
-            </section>
-          )}
-
-          {/* LIST TAB */}
-          {activeTab === "list" && (
-            <section className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl shadow-sm p-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-4">
-                <h2 className="text-lg font-semibold">Список расходов</h2>
-                <div className="flex flex-wrap gap-2">
-                  <select className="rounded-2xl border border-slate-300 px-3 py-2 bg-white/90" value={filters.year} onChange={(e)=>setFilters((f)=>({ ...f, year: e.target.value }))}>
-                    <option value="">Все годы</option>
-                    {years.map((y)=> (<option key={y} value={y}>{y}</option>))}
-                  </select>
-                  <select className="rounded-2xl border border-slate-300 px-3 py-2 bg-white/90" value={filters.month} onChange={(e)=>setFilters((f)=>({ ...f, month: e.target.value }))}>
-                    <option value="">Все месяцы</option>
-                    {months.map(([val,label])=> (<option key={val} value={val}>{label}</option>))}
-                  </select>
-                  <select className="rounded-2xl border border-slate-300 px-3 py-2 bg-white/90" value={filters.category} onChange={(e)=>setFilters((f)=>({ ...f, category: e.target.value }))}>
-                    <option value="">Все категории</option>
-                    {categories.map((c)=> (<option key={c} value={c}>{c}</option>))}
-                  </select>
-                  <button className="px-3 py-2 rounded-2xl border border-white/60 bg-white/60 hover:bg-white" onClick={()=>setFilters({ month: "", year: "", category: "" })}>Сбросить</button>
-                </div>
-              </div>
-
-              <div className="overflow-auto rounded-2xl border border-white/60">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-white/70">
-                    <tr>
-                      <th className="text-left px-3 py-2">Дата</th>
-                      <th className="text-right px-3 py-2">Сумма</th>
-                      <th className="text-left px-3 py-2">Категория</th>
-                      <th className="text-left px-3 py-2">Описание</th>
-                      <th className="px-3 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.length === 0 && (
-                      <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-500">Нет записей</td></tr>
-                    )}
-                    {filtered.map((e)=> (
-                      <tr key={e.id} className="border-t border-white/60">
-                        <td className="px-3 py-2 whitespace-nowrap">{e.date}</td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">{formatNumber(e.amount, currency)}</td>
-                        <td className="px-3 py-2">{e.category || "—"}</td>
-                        <td className="px-3 py-2">{e.note || ""}</td>
-                        <td className="px-3 py-2 text-right"><button className="text-red-600 hover:underline" onClick={()=>removeExpense(e.id)}>Удалить</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between">
-                <div className="text-slate-700 font-medium">Итого по выборке: {formatNumber(totals.sum, currency)}</div>
-                <button className="px-3 py-2 rounded-2xl border border-white/60 bg-white/60 hover:bg-white" onClick={exportCSV}>Скачать отфильтрованное как CSV</button>
-              </div>
-            </section>
-          )}
-
-          {/* REPORT TAB */}
-          {activeTab === "report" && (
-            <section className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold mb-4">Отчёт</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="h-80">
-                  <h3 className="text-sm font-medium text-slate-600 mb-2">Распределение по категориям</h3>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label />
-                      <Tooltip formatter={(val) => formatNumber(val, currency)} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="h-80">
-                  <h3 className="text-sm font-medium text-slate-600 mb-2">Траты по месяцам</h3>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip formatter={(val) => formatNumber(val, currency)} />
-                      <Legend />
-                      <Bar dataKey="total" name="Итого" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-white/60 p-4 bg-white/60">
-                  <div className="text-sm text-slate-500">Всего записей</div>
-                  <div className="text-2xl font-semibold">{filtered.length}</div>
-                </div>
-                <div className="rounded-2xl border border-white/60 p-4 bg-white/60">
-                  <div className="text-sm text-slate-500">Сумма по выборке</div>
-                  <div className="text-2xl font-semibold">{formatNumber(totals.sum, currency)}</div>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* SETTINGS (inline at bottom) */}
-          <section className="bg-white/40 backdrop-blur-xl border border-white/50 rounded-3xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-3">Настройки</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-slate-600 mb-1">Валюта (отображение)</label>
-                <input type="text" value={currency} onChange={(e)=>setCurrency(e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" />
-                <p className="text-xs text-slate-500 mt-2">Например: "сомони", "TJS", "с.", "SM"</p>
-              </div>
-            </div>
-          </section>
+    <div class="actions">
+      <button class="btn primary" id="btnExportCSV">Скачать CSV</button>
+      <button class="btn" id="btnExportJSON">Экспорт JSON</button>
+      <label class="btn" style="cursor:pointer">
+        Импорт JSON
+        <input id="fileImport" type="file" accept="application/json" style="display:none" />
+      </label>
+    </div>
+    <!-- ADD -->
+    <section class="card" id="tab-add" style="margin-top:16px">
+      <h3 style="margin:0 0 12px 0">Добавить расход</h3>
+      <div class="grid grid-2">
+        <div>
+          <label>Сумма (валюта на экране)</label>
+          <input id="amount" type="text" inputmode="decimal" placeholder="0.00" />
+        </div>
+        <div>
+          <label>Дата</label>
+          <input id="date" type="date" />
         </div>
       </div>
-    </div>
-  );
-}
 
-// ===== Dev Self-Tests (run in browser console) =====
-function runSelfTests() {
-  // Test parseAmount with dot and comma
-  console.assert(Math.abs(parseAmount("12.34") - 12.34) < 1e-9, "parseAmount dot fail");
-  console.assert(Math.abs(parseAmount("12,34") - 12.34) < 1e-9, "parseAmount comma fail");
+      <div style="margin-top:12px">
+        <label>Категория</label>
+        <div class="grid grid-2" id="categoryGrid"></div>
+        <input id="customCat" type="text" placeholder="Своя категория (для 'Другое')" style="margin-top:8px;display:none" />
+      </div>
 
-  // Test toCSV escaping and newline joining
-  const rows = [{ id: "1", date: "2025-10-14", amount: 12.5, category: "Еда", note: "Кофе \"латте\"" }];
-  const csv = toCSV(rows);
-  const lines = csv.split("\n");
-  console.assert(lines.length === 2, "toCSV should produce 2 lines");
-  console.assert(lines[0].includes("id,date,amount,category,note") || true, "header present (visual check)");
-  console.assert(csv.includes('Кофе ""латте""'), 'CSV should double quotes for RFC4180');
-  console.assert(toCSV([]) === "", "toCSV([]) should be empty string");
-  console.log("✅ Self-tests passed");
-}
+      <div style="margin-top:12px">
+        <label>Описание (необязательно)</label>
+        <input id="note" type="text" placeholder="Например: обед в кафе" />
+      </div>
 
-if (typeof window !== "undefined") {
-  try { runSelfTests(); } catch (err) { console.error("Self-tests failed:", err); }
-}
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" id="btnAdd">Добавить расход</button>
+        <button class="btn" id="btnClearAll" style="color:#dc2626;border-color:#fee2e2">Очистить всё</button>
+      </div>
+    </section>
+
+    <!-- LIST -->
+    <section class="card" id="tab-list" style="margin-top:16px;display:none">
+      <div class="row" style="margin-bottom:12px">
+        <h3 style="margin:0">Список расходов</h3>
+        <div class="row" style="gap:8px">
+          <select id="fltYear"><option value="">Все годы</option></select>
+          <select id="fltMonth"><option value="">Все месяцы</option></select>
+          <select id="fltCat"><option value="">Все категории</option></select>
+          <button class="btn" id="btnReset">Сбросить</button>
+        </div>
+      </div>
+      <div style="overflow:auto;border:1px solid #eef2f7;border-radius:14px">
+        <table class="table" id="tbl"></table>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="muted">Итого по выборке: <b id="sum"></b></div>
+        <button class="btn" id="btnDownloadFiltered">Скачать отфильтрованное CSV</button>
+      </div>
+    </section>
+
+    <!-- REPORT -->
+    <section class="card" id="tab-report" style="margin-top:16px;display:none">
+      <h3 style="margin:0 0 12px 0">Отчёт</h3>
+      <div class="grid grid-2">
+        <div class="card" style="padding:12px"><div class="muted">Всего записей</div><div style="font-size:22px;font-weight:700" id="statCount">0</div></div>
+        <div class="card" style="padding:12px"><div class="muted">Сумма по выборке</div><div style="font-size:22px;font-weight:700" id="statSum">0</div></div>
+      </div>
+      <p class="muted" style="margin-top:12px">Графики добавим позже; сейчас — офлайн‑ядро без внешних библиотек.</p>
+    </section>
+  </div>
+
+  <script>
+  // ==== PWA SW
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(()=>console.warn('SW register failed'));
+  }
+
+  // ==== IndexedDB tiny wrapper
+  const DB_NAME = 'budget-db';
+  const STORE = 'kv';
+  const KEY = 'state';
+
+  function idbOpen() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbGet() {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const st = tx.objectStore(STORE);
+      const r = st.get(KEY);
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function idbSet(val) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const st = tx.objectStore(STORE);
+      const r = st.put(val, KEY);
+      r.onsuccess = () => resolve();
+      r.onerror = () => reject(r.error);
+    });
+  }
+    // ==== App state
+  const DEFAULT_CATEGORIES = ['Еда','Транспорт','Развлечения','Здоровье','Покупки','Связь','Подписки','Дом','Одежда','Другое'];
+  let state = { currency: 'сомони', expenses: [] };
+
+  function parseAmount(v){ if(typeof v==='number') return v; if(!v) return 0; const n = Number(String(v).replace(',', '.')); return isNaN(n)?0:n; }
+  function formatNumber(n){ const num = Number(n||0); return num.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + state.currency; }
+  function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
+
+  const $ = (sel)=>document.querySelector(sel);
+  const $$= (sel)=>Array.from(document.querySelectorAll(sel));
+
+  function setToday(){ $('#date').value = new Date().toISOString().slice(0,10); }
+
+  function renderCategories(){
+    const grid = $('#categoryGrid'); grid.innerHTML = '';
+    const cats = Array.from(new Set([ ...DEFAULT_CATEGORIES, ...state.expenses.map(e=>e.category).filter(Boolean) ])).sort();
+    cats.forEach(c=>{
+      const btn = document.createElement('button');
+      btn.className = 'pill'; btn.textContent = c; btn.dataset.cat = c;
+      btn.onclick = ()=>{ $$('.pill').forEach(p=>p.classList.remove('active')); btn.classList.add('active'); $('#customCat').style.display = (c==='Другое')?'block':'none'; };
+      grid.appendChild(btn);
+    });
+  }
+  function getSelectedCategory(){
+    const active = $('#categoryGrid .pill.active');
+    if(!active) return '';
+    const c = active.dataset.cat;
+    if(c==='Другое') return ($('#customCat').value||'').trim();
+    return c;
+  }
+
+  function toCSV(rows){
+    if(!rows?.length) return '';
+    const header = ['id','date','amount','category','note'];
+    const esc = (s)=> '"'+String(s??'').replace(/"/g,'""')+'"';
+    const out = [ header.map(esc).join(',') ];
+    for(const r of rows){ out.push([r.id,r.date,r.amount,r.category,r.note].map(esc).join(',')); }
+    return out.join('\n');
+  }
+
+  function rebuildFilters(){
+    const years = new Set(state.expenses.map(e=> (e.date||'').slice(0,4)).filter(Boolean));
+    const months=[['01','Январь'],['02','Февраль'],['03','Март'],['04','Апрель'],['05','Май'],['06','Июнь'],['07','Июль'],['08','Август'],['09','Сентябрь'],['10','Октябрь'],['11','Ноябрь'],['12','Декабрь']];
+    const cats = new Set(state.expenses.map(e=>e.category).filter(Boolean));
+    const sel = (el, items, withLabels=false)=>{ el.innerHTML='<option value="">Все</option>'+items.map(x=>`<option value="${withLabels?x[0]:x}">${withLabels?x[1]:x}</option>`).join('') };
+    sel($('#fltYear'), Array.from(years).sort());
+    sel($('#fltMonth'), months, true);
+    sel($('#fltCat'), Array.from(cats).sort());
+  }
+
+  function filterRows(list){
+    const fy = $('#fltYear').value; const fm = $('#fltMonth').value; const fc = $('#fltCat').value;
+    return list.filter(e=>{
+      const y=(e.date||'').slice(0,4); const m=(e.date||'').slice(5,7);
+      if(fy && y!==fy) return false; if(fm && m!==fm) return false; if(fc && e.category!==fc) return false; return true;
+    });
+  }
+    function renderTable(){
+    const rows = filterRows(state.expenses);
+    const tbl = $('#tbl');
+    tbl.innerHTML = '<thead><tr><th>Дата</th><th style="text-align:right">Сумма</th><th>Категория</th><th>Описание</th><th></th></tr></thead>';
+    const body = document.createElement('tbody');
+    if(rows.length===0){ const tr=document.createElement('tr'); const td=document.createElement('td'); td.colSpan=5; td.className='muted'; td.style.textAlign='center'; td.style.padding='18px'; td.textContent='Нет записей'; tr.appendChild(td); body.appendChild(tr); }
+    rows.forEach(e=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML = <td>${e.date}</td><td style="text-align:right">${formatNumber(e.amount)}</td><td>${e.category||'—'}</td><td>${e.note||''}</td><td style="text-align:right"><button class="btn" data-del="${e.id}">Удалить</button></td>;
+      body.appendChild(tr);
+    });
+    tbl.appendChild(body);
+    const sum = rows.reduce((a,e)=>a+parseAmount(e.amount),0); $('#sum').textContent = formatNumber(sum); $('#statSum').textContent = formatNumber(sum); $('#statCount').textContent = String(rows.length);
+    body.querySelectorAll('button[data-del]').forEach(b=> b.onclick = ()=>{ const id=b.getAttribute('data-del'); state.expenses = state.expenses.filter(x=>x.id!==id); idbSet(state).then(()=>renderAll()); });
+  }
+
+  function renderAll(){ renderCategories(); rebuildFilters(); renderTable(); }
+
+  // Events
+  $('#seg').addEventListener('click', (e)=>{ if(e.target.tagName!=='BUTTON') return; const tab=e.target.dataset.tab; $$('#seg button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab)); ['add','list','report'].forEach(k=>$('#tab-'+k).style.display = (k===tab)?'block':'none'); });
+
+  $('#btnAdd').onclick = ()=>{
+    const item = {
+      id: uid(),
+      date: $('#date').value,
+      amount: parseAmount($('#amount').value),
+      category: getSelectedCategory(),
+      note: ($('#note').value||'').trim(),
+    };
+    if(!item.date || !item.amount){ alert('Укажи дату и сумму'); return; }
+    state.expenses.unshift(item);
+    idbSet(state).then(()=>{ $('#amount').value=''; $('#note').value=''; renderAll(); });
+  };
+  $('#btnClearAll').onclick = ()=>{ if(confirm('Удалить ВСЕ расходы?')){ state.expenses=[]; idbSet(state).then(renderAll); }};
+  $('#btnReset').onclick = ()=>{ $('#fltYear').value=''; $('#fltMonth').value=''; $('#fltCat').value=''; renderAll(); };
+  $('#btnDownloadFiltered').onclick = ()=>{ const csv=toCSV(filterRows(state.expenses)); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='expenses-filtered.csv'; a.click(); };
+  $('#btnExportCSV').onclick = ()=>{ const csv=toCSV(state.expenses); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='expenses.csv'; a.click(); };
+  $('#btnExportJSON').onclick = ()=>{ const json=JSON.stringify(state,null,2); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'})); a.download='expenses-backup.json'; a.click(); };
+  $('#fileImport').addEventListener('change', (ev)=>{ const f=ev.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ const obj=JSON.parse(r.result); if(Array.isArray(obj.expenses)) state.expenses=obj.expenses; if(obj.currency) state.currency=obj.currency; idbSet(state).then(()=>{ renderAll(); alert('Импорт завершён'); }); }catch{ alert('Неверный JSON'); } }; r.readAsText(f); ev.target.value=''; });
+
+  // Boot
+  (async ()=>{
+    try{
+      const loaded = await idbGet();
+      if(loaded){ state = loaded; }
+      else{ $('#date').value = new Date().toISOString().slice(0,10); }
+    }catch(e){ console.warn('IDB load fail', e); }
+    if(!$('#date').value) $('#date').value = new Date().toISOString().slice(0,10);
+    renderAll();
+  })();
+  </script>
+</body>
+</html>

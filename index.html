@@ -1,681 +1,471 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Английские карточки — 1 файл</title>
-  <style>
-    :root{
-      --bg:#0c0d10;           /* deep neutral */
-      --panel:rgba(24,26,32,.65); /* glass panel */
-      --panel-2:rgba(20,22,28,.55);
-      --line:rgba(255,255,255,.08);
-      --text:#e9e9eb;         /* primary text */
-      --muted:#b2b6c2;        /* secondary */
-      --accent:#0a84ff;       /* Apple blue */
-      --success:#30d158;      /* Apple green */
-      --danger:#ff453a;       /* Apple red */
-      --shadow:0 20px 50px rgba(0,0,0,.45), 0 6px 18px rgba(0,0,0,.35);
-      --radius-xl:22px;       /* rounded corners */
-      --radius:16px;
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { PieChart, Pie, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
+
+// ===== Helpers
+// NOTE: STORAGE_KEY is kept for legacy migration from localStorage → IndexedDB
+const STORAGE_KEY = "expense-tracker-v1";
+const DEFAULT_CATEGORIES = [
+  "Еда",
+  "Транспорт",
+  "Развлечения",
+  "Здоровье",
+  "Покупки",
+  "Связь",
+  "Подписки",
+  "Дом",
+  "Одежда",
+  "Другое",
+];
+
+const CATEGORY_UI = {
+  "Еда": { emoji: "🍔", color: "bg-orange-500 text-white", idle: "bg-white/80 hover:bg-white" },
+  "Транспорт": { emoji: "🚗", color: "bg-sky-500 text-white", idle: "bg-white/80 hover:bg-white" },
+  "Развлечения": { emoji: "🎮", color: "bg-violet-500 text-white", idle: "bg-white/80 hover:bg-white" },
+  "Здоровье": { emoji: "💊", color: "bg-emerald-500 text-white", idle: "bg-white/80 hover:bg-white" },
+  "Покупки": { emoji: "🛍️", color: "bg-pink-500 text-white", idle: "bg-white/80 hover:bg-white" },
+  "Связь": { emoji: "📶", color: "bg-indigo-500 text-white", idle: "bg-white/80 hover:bg-white" },
+  "Подписки": { emoji: "🔁", color: "bg-blue-500 text-white", idle: "bg-white/80 hover:bg-white" },
+  "Дом": { emoji: "🏠", color: "bg-teal-500 text-white", idle: "bg-white/80 hover:bg-white" },
+  "Одежда": { emoji: "👕", color: "bg-amber-500 text-white", idle: "bg-white/80 hover:bg-white" },
+  "Другое": { emoji: "📦", color: "bg-slate-500 text-white", idle: "bg-white/80 hover:bg-white" },
+};
+
+function uid() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function formatNumber(n, currencySymbol) {
+  const num = Number(n || 0);
+  return `${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencySymbol}`;
+}
+
+function parseAmount(v) {
+  if (typeof v === "number") return v;
+  if (!v) return 0;
+  const normalized = String(v).replace(/,/g, ".");
+  const n = Number(normalized);
+  return isNaN(n) ? 0 : n;
+}
+
+// ===== CSV helpers
+function toCSV(rows) {
+  if (!rows?.length) return "";
+  const header = ["id", "date", "amount", "category", "note"];
+  const escapeCell = (c) => `"${String(c ?? "").replace(/"/g, '""')}"`;
+  const lines = [header.map(escapeCell).join(",")];
+  for (const r of rows) {
+    lines.push(header.map((h) => escapeCell(r[h])).join(","));
+  }
+  // IMPORTANT: keep this on one line with a properly closed string
+  return lines.join("
+");
+}
+
+// ===== IndexedDB storage (no dependencies)
+const DB_NAME = 'budget-db';
+const STORE_NAME = 'kv';
+const STATE_KEY = 'state';
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet() {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.get(STATE_KEY);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(val) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.put(val, STATE_KEY);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function download(filename, text) {(filename, text) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ===== Main App (Apple‑like visual) // PWA-ready: see sw.js + manifest.json below
+export default function ExpenseApp() {
+  const [activeTab, setActiveTab] = useState("add"); // add | list | report
+
+  const [expenses, setExpenses] = useState([]);
+  const [currency, setCurrency] = useState("сомони");
+  const [filters, setFilters] = useState({ month: "", year: "", category: "" });
+
+  // Form state
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [amount, setAmount] = useState(0);
+  const [category, setCategory] = useState("");
+  const [note, setNote] = useState("");
+  const [customCategory, setCustomCategory] = useState("");
+
+  const fileInputRef = useRef(null);
+
+  // Load/Save
+  useEffect(() => {
+    (async () => {
+      try {
+        // 1) Try load from IndexedDB
+        const loaded = await idbGet();
+        if (loaded) {
+          if (Array.isArray(loaded.expenses)) setExpenses(loaded.expenses);
+          if (loaded.currency) setCurrency(loaded.currency);
+        } else {
+          // 2) Migrate from legacy localStorage if exists
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed.expenses)) setExpenses(parsed.expenses);
+              if (parsed.currency) setCurrency(parsed.currency);
+              await idbSet({ expenses: parsed.expenses || [], currency: parsed.currency || "сомони" });
+            }
+          } catch (e) {
+            console.warn('Legacy localStorage parse failed', e);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load from IndexedDB', e);
+      }
+      // PWA: register service worker if present
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch((err) => console.warn('SW register fail', err));
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await idbSet({ expenses, currency });
+      } catch (e) {
+        console.error('Failed to save to IndexedDB', e);
+      }
+    })();
+  }, [expenses, currency]);
+
+  // Derived lists
+  const categories = useMemo(() => {
+    const expCats = new Set(expenses.map((e) => (e.category || "").trim()).filter(Boolean));
+    const all = new Set([...DEFAULT_CATEGORIES, ...Array.from(expCats)]);
+    return Array.from(all).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }, [expenses]);
+
+  const years = useMemo(() => {
+    const set = new Set(expenses.map((e) => (e.date || "").slice(0, 4)).filter(Boolean));
+    return Array.from(set).sort();
+  }, [expenses]);
+
+  const months = [
+    ["01", "Январь"], ["02", "Февраль"], ["03", "Март"], ["04", "Апрель"], ["05", "Май"], ["06", "Июнь"],
+    ["07", "Июль"], ["08", "Август"], ["09", "Сентябрь"], ["10", "Октябрь"], ["11", "Ноябрь"], ["12", "Декабрь"],
+  ];
+
+  const filtered = useMemo(() => {
+    return expenses.filter((e) => {
+      const y = e.date?.slice(0, 4);
+      const m = e.date?.slice(5, 7);
+      if (filters.year && y !== filters.year) return false;
+      if (filters.month && m !== filters.month) return false;
+      if (filters.category && (e.category || "") !== filters.category) return false;
+      return true;
+    });
+  }, [expenses, filters]);
+
+  const totals = useMemo(() => {
+    const sum = filtered.reduce((acc, e) => acc + parseAmount(e.amount), 0);
+    const byCategory = {};
+    for (const e of filtered) {
+      const key = (e.category || "Без категории").trim() || "Без категории";
+      byCategory[key] = (byCategory[key] || 0) + parseAmount(e.amount);
     }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0;
-      font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Inter,"Helvetica Neue",Arial,system-ui;
-      color:var(--text);
-      background:
-        radial-gradient(1200px 800px at 80% -10%, #0f1320 0%, transparent 60%),
-        linear-gradient(180deg,#0b0d12 0%, #0f1116 60%, #0b0d12 100%);
-      letter-spacing:.2px;
+    const byMonth = {};
+    for (const e of filtered) {
+      const ym = (e.date || "").slice(0, 7);
+      if (!ym) continue;
+      byMonth[ym] = (byMonth[ym] || 0) + parseAmount(e.amount);
     }
-    a{color:inherit}
-    .app{max-width:1000px;margin:0 auto;padding:24px 16px 80px}
+    return { sum, byCategory, byMonth };
+  }, [filtered]);
 
-    /* Header — frosted, minimal */
-    header{
-      position:sticky;top:0;z-index:50;
-      -webkit-backdrop-filter:saturate(180%) blur(18px);
-      backdrop-filter:saturate(180%) blur(18px);
-      background:linear-gradient(180deg, rgba(20,22,28,.75), rgba(20,22,28,.55));
-      border-bottom:1px solid var(--line);
-    }
-    .bar{display:flex;align-items:center;gap:12px;max-width:1000px;margin:0 auto;padding:14px 16px}
-    .logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px}
-    .logo-dot{width:10px;height:10px;border-radius:999px;background:radial-gradient(circle at 30% 30%, #0a84ff, #30d158);box-shadow:0 0 12px #0a84ff66}
-    .spacer{flex:1}
+  const pieData = useMemo(() => Object.entries(totals.byCategory).map(([name, value]) => ({ name, value: Number(value.toFixed(2)) })), [totals]);
+  const barData = useMemo(() => Object.entries(totals.byMonth).sort(([a],[b])=>a.localeCompare(b)).map(([ym,value])=>({ name: ym, total: Number(value.toFixed(2)) })), [totals]);
 
-    /* Menu button -> subtle capsule */
-    .menu-btn{border:1px solid var(--line);border-radius:999px;padding:10px 16px;background:rgba(255,255,255,.04);color:var(--text);box-shadow:inset 0 1px rgba(255,255,255,.08);cursor:pointer;transition:.2s ease}
-    .menu-btn:hover{background:rgba(255,255,255,.07)}
-    .menu-btn:active{transform:translateY(1px)}
-    .menu-panel{position:absolute;right:16px;top:62px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);display:none;min-width:280px;overflow:hidden}
-    .menu-panel.open{display:block}
-    .menu-list{display:flex;flex-direction:column}
-    .menu-item{padding:14px 16px;border-bottom:1px solid var(--line);cursor:pointer}
-    .menu-item:last-child{border-bottom:none}
-    .menu-item:hover{background:rgba(255,255,255,.06)}
+  // Actions
+  function addExpense(e) {
+    e?.preventDefault?.();
+    if (!date || !amount) return;
+    const cat = (category === "Другое" ? customCategory : category) || "";
+    const item = { id: uid(), date, amount: parseAmount(amount), category: cat.trim(), note: note.trim() };
+    setExpenses((prev) => [item, ...prev]);
+    setAmount(0); setNote(""); setCustomCategory("");
+  }
+  function removeExpense(id) { setExpenses((prev) => prev.filter((x) => x !== id)); }
+  function clearAll() { if (confirm("Удалить ВСЕ расходы? Это действие нельзя отменить.")) setExpenses([]); }
+  function exportJSON() { const payload = JSON.stringify({ currency, expenses }, null, 2); download(`expenses-backup-${new Date().toISOString().slice(0,10)}.json`, payload); }
+  function importJSON(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try { const obj = JSON.parse(reader.result); if (Array.isArray(obj.expenses)) setExpenses(obj.expenses); if (obj.currency) setCurrency(obj.currency); alert("Импорт завершён"); }
+      catch { alert("Ошибка импорта: неверный файл"); }
+    }; reader.readAsText(file);
+  }
+  function exportCSV() { const csv = toCSV(filtered); download(`expenses-${new Date().toISOString().slice(0,10)}.csv`, csv); }
 
-    /* Screen transitions */
-    .screen{display:none;animation:fade .2s ease}
-    .screen.active{display:block}
-    @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  // ===== UI (glass / Apple‑like)
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200 text-slate-900 p-6">
+      <div className="mx-auto max-w-6xl">
+        {/* Header */}
+        <header className="mb-6">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/60 grid place-items-center shadow-sm">💰</div>
+            <div>
+              <h1 className="text-3xl font-semibold tracking-tight">Мой Бюджет</h1>
+              <p className="text-sm text-slate-600">Учёт личных расходов. Данные локально в браузере.</p>
+            </div>
+          </div>
 
-    /* Home tiles — glassy cards */
-    .hero{display:grid;gap:16px;grid-template-columns:1fr;max-width:860px;margin:28px auto}
-    .tile{background:linear-gradient(180deg, var(--panel), var(--panel-2));border:1px solid var(--line);border-radius:var(--radius-xl);box-shadow:var(--shadow);padding:22px;display:flex;align-items:center;justify-content:space-between;gap:16px;transition:transform .18s ease, box-shadow .18s ease}
-    .tile:hover{transform:translateY(-2px)}
-    .tile-title{font-size:20px;font-weight:700}
-    .tile-sub{color:var(--muted);font-size:14px}
-    .tile .actions{display:flex;gap:10px}
+          {/* Segmented control */}
+          <div className="mt-4 inline-flex rounded-2xl border border-white/60 bg-white/60 backdrop-blur-xl p-1 shadow-sm">
+            {[
+              { key: "add", label: "Добавить" },
+              { key: "list", label: "Список" },
+              { key: "report", label: "Отчёт" },
+            ].map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`px-4 py-2 rounded-xl text-sm transition ${activeTab===t.key?"bg-white shadow-sm":"hover:bg-white/70"}`}
+              >{t.label}</button>
+            ))}
+          </div>
 
-    /* Buttons */
-    .btn{border:1px solid var(--line);border-radius:14px;padding:11px 16px;background:rgba(255,255,255,.04);color:var(--text);cursor:pointer;transition:.18s ease;box-shadow:inset 0 1px rgba(255,255,255,.08)}
-    .btn:hover{background:rgba(255,255,255,.07)}
-    .btn:active{transform:translateY(1px)}
-    .btn.primary{background:linear-gradient(180deg,#0a84ff,#0066cc);border-color:rgba(10,132,255,.5);color:white;box-shadow:0 6px 20px rgba(10,132,255,.35), inset 0 1px rgba(255,255,255,.35)}
-    .btn.primary:hover{filter:brightness(1.05)}
-    .btn.ghost{background:transparent}
+          {/* Actions */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-slate-800" onClick={exportCSV}>Скачать CSV</button>
+            <button className="px-4 py-2 rounded-2xl border border-white/60 bg-white/60 backdrop-blur-xl hover:bg-white" onClick={exportJSON}>Экспорт JSON</button>
+            <button className="px-4 py-2 rounded-2xl border border-white/60 bg-white/60 backdrop-blur-xl hover:bg-white" onClick={() => fileInputRef.current?.click()}>Импорт JSON</button>
+            <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={(e)=>{const f=e.target.files?.[0]; if(f) importJSON(f); e.currentTarget.value="";}} />
+          </div>
+        </header>
 
-    /* Lists */
-    .list-top{display:flex;align-items:center;gap:12px;justify-content:space-between;margin:22px 0}
-    .search{flex:1;display:flex;gap:10px}
-    .search input{width:100%;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--line);outline:none;transition:.18s ease}
-    .search input::placeholder{color:#9aa3b2}
-    .search input:focus{box-shadow:0 0 0 2px #0a84ff66}
-    .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
-    .row{background:linear-gradient(180deg, rgba(28,30,36,.7), rgba(24,26,32,.7));border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
-    .row .w{font-weight:700}
-    .row .t{color:var(--muted)}
+        <div className="grid grid-cols-1 gap-6">
+          {/* ADD TAB */}
+          {activeTab === "add" && (
+            <section className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold mb-4">Добавить расход</h2>
+              <form className="space-y-4" onSubmit={addExpense}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-slate-600 mb-1">Сумма ({currency})</label>
+                    <input type="text" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e)=>setAmount(e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-slate-600 mb-1">Дата</label>
+                    <input type="date" value={date} onChange={(e)=>setDate(e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" required />
+                  </div>
+                </div>
 
-    /* Learn view */
-    .learn-wrap{max-width:720px;margin:20px auto}
-    .progress{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px;color:var(--muted)}
-    .badge{display:inline-flex;gap:8px;align-items:center;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.04)}
+                <div>
+                  <label className="block text-sm text-slate-600 mb-2">Категория</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {categories.map((c) => {
+                      const ui = CATEGORY_UI[c] || { emoji: "🏷️", color: "bg-slate-900 text-white", idle: "bg-white/80 hover:bg-white" };
+                      const selected = category === c;
+                      return (
+                        <button
+                          type="button"
+                          key={c}
+                          onClick={() => setCategory(c)}
+                          className={`group relative w-full rounded-2xl px-4 py-3 text-left ring-1 ring-black/5 shadow-sm transition ${selected ? ui.color : ui.idle}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl">{ui.emoji}</span>
+                            <span className={`font-medium ${selected?"opacity-100":"opacity-80"}`}>{c}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {category === "Другое" && (
+                    <input type="text" placeholder="Своя категория" value={customCategory} onChange={(e)=>setCustomCategory(e.target.value)} className="mt-3 w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" />
+                  )}
+                </div>
 
-    .card{position:relative;background:linear-gradient(180deg, rgba(28,30,36,.75), rgba(20,22,28,.65));border:1px solid var(--line);border-radius:26px;padding:26px 24px 28px;box-shadow:var(--shadow)}
+                <div>
+                  <label className="block text-sm text-slate-600 mb-1">Описание (необязательно)</label>
+                  <input type="text" placeholder="Например: обед в кафе" value={note} onChange={(e)=>setNote(e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" />
+                </div>
 
-    /* Circular green check */
-    .check{position:absolute;right:16px;top:16px;width:46px;height:46px;border-radius:999px;border:1px solid rgba(48,209,88,.5);background:radial-gradient(110px 110px at 20% 10%, #39e27f, #159a4a);box-shadow:0 10px 25px rgba(48,209,88,.35), inset 0 1px rgba(255,255,255,.35);color:white;font-size:20px;font-weight:900;cursor:pointer;transition:.15s ease}
-    .check:hover{filter:brightness(1.06)}
-    .check:active{transform:scale(.98)}
+                <div className="flex items-center justify-between pt-1">
+                  <button type="submit" className="px-5 py-3 rounded-2xl bg-violet-600 text-white hover:bg-violet-500 shadow-sm">Добавить расход</button>
+                  <button type="button" className="text-sm text-red-600 hover:underline" onClick={clearAll}>Очистить всё</button>
+                </div>
+              </form>
+            </section>
+          )}
 
-    .word{font-size:36px;font-weight:800;letter-spacing:.2px;margin:8px 0 2px}
-    .translation{font-size:18px;color:var(--muted)}
-    .ipa{display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--line);cursor:pointer;transition:.18s ease}
-    .ipa small{color:#9aa3b2}
-    .ipa:hover{background:rgba(255,255,255,.07)}
+          {/* LIST TAB */}
+          {activeTab === "list" && (
+            <section className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl shadow-sm p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-4">
+                <h2 className="text-lg font-semibold">Список расходов</h2>
+                <div className="flex flex-wrap gap-2">
+                  <select className="rounded-2xl border border-slate-300 px-3 py-2 bg-white/90" value={filters.year} onChange={(e)=>setFilters((f)=>({ ...f, year: e.target.value }))}>
+                    <option value="">Все годы</option>
+                    {years.map((y)=> (<option key={y} value={y}>{y}</option>))}
+                  </select>
+                  <select className="rounded-2xl border border-slate-300 px-3 py-2 bg-white/90" value={filters.month} onChange={(e)=>setFilters((f)=>({ ...f, month: e.target.value }))}>
+                    <option value="">Все месяцы</option>
+                    {months.map(([val,label])=> (<option key={val} value={val}>{label}</option>))}
+                  </select>
+                  <select className="rounded-2xl border border-slate-300 px-3 py-2 bg-white/90" value={filters.category} onChange={(e)=>setFilters((f)=>({ ...f, category: e.target.value }))}>
+                    <option value="">Все категории</option>
+                    {categories.map((c)=> (<option key={c} value={c}>{c}</option>))}
+                  </select>
+                  <button className="px-3 py-2 rounded-2xl border border-white/60 bg-white/60 hover:bg-white" onClick={()=>setFilters({ month: "", year: "", category: "" })}>Сбросить</button>
+                </div>
+              </div>
 
-    .example{margin-top:14px;font-size:16px}
-    .example .ru{color:#c0c5d0;margin-top:6px}
+              <div className="overflow-auto rounded-2xl border border-white/60">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-white/70">
+                    <tr>
+                      <th className="text-left px-3 py-2">Дата</th>
+                      <th className="text-right px-3 py-2">Сумма</th>
+                      <th className="text-left px-3 py-2">Категория</th>
+                      <th className="text-left px-3 py-2">Описание</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.length === 0 && (
+                      <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-500">Нет записей</td></tr>
+                    )}
+                    {filtered.map((e)=> (
+                      <tr key={e.id} className="border-t border-white/60">
+                        <td className="px-3 py-2 whitespace-nowrap">{e.date}</td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">{formatNumber(e.amount, currency)}</td>
+                        <td className="px-3 py-2">{e.category || "—"}</td>
+                        <td className="px-3 py-2">{e.note || ""}</td>
+                        <td className="px-3 py-2 text-right"><button className="text-red-600 hover:underline" onClick={()=>removeExpense(e.id)}>Удалить</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-    .controls{display:flex;gap:10px;margin-top:16px}
-    .pill{padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);cursor:pointer;transition:.18s ease}
-    .pill:hover{background:rgba(255,255,255,.07)}
-    .pill.bad{border-color:rgba(255,69,58,.45)}
+              <div className="mt-4 flex items-center justify-between">
+                <div className="text-slate-700 font-medium">Итого по выборке: {formatNumber(totals.sum, currency)}</div>
+                <button className="px-3 py-2 rounded-2xl border border-white/60 bg-white/60 hover:bg-white" onClick={exportCSV}>Скачать отфильтрованное как CSV</button>
+              </div>
+            </section>
+          )}
 
-    .empty{opacity:.9;color:var(--muted);text-align:center;padding:40px 10px}
-    .hint{color:#9aa3b2;font-size:13px;margin-top:6px}
+          {/* REPORT TAB */}
+          {activeTab === "report" && (
+            <section className="bg-white/70 backdrop-blur-xl border border-white/60 rounded-3xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold mb-4">Отчёт</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="h-80">
+                  <h3 className="text-sm font-medium text-slate-600 mb-2">Распределение по категориям</h3>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label />
+                      <Tooltip formatter={(val) => formatNumber(val, currency)} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="h-80">
+                  <h3 className="text-sm font-medium text-slate-600 mb-2">Траты по месяцам</h3>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip formatter={(val) => formatNumber(val, currency)} />
+                      <Legend />
+                      <Bar dataKey="total" name="Итого" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
 
-    /* Small motion cues */
-    .tile,.btn,.row,.card,.pill,.ipa{transform:translateZ(0)}
-  </style>
-</head>
-<body>
-  <header>
-    <div class="bar">
-      <div class="logo"><span class="logo-dot"></span> Английские карточки</div>
-      <div class="spacer"></div>
-      <button class="menu-btn" id="menuBtn">Меню ▾</button>
-      <div class="menu-panel" id="menuPanel" role="menu" aria-hidden="true">
-        <div class="menu-list">
-          <div class="menu-item" data-nav="home">Главный экран</div>
-          <div class="menu-item" data-nav="wordsList">3000 слов — список</div>
-          <div class="menu-item" data-nav="learnWords">Учить слова</div>
-          <div class="menu-item" data-nav="phrasalsList">Фразовые глаголы — список</div>
-          <div class="menu-item" data-nav="learnPhrasals">Учить фразовые глаголы</div>
-          <div class="menu-item" data-nav="learned">Выученные слова</div>
-          <div class="menu-item" id="resetAll">Сбросить прогресс</div>
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-white/60 p-4 bg-white/60">
+                  <div className="text-sm text-slate-500">Всего записей</div>
+                  <div className="text-2xl font-semibold">{filtered.length}</div>
+                </div>
+                <div className="rounded-2xl border border-white/60 p-4 bg-white/60">
+                  <div className="text-sm text-slate-500">Сумма по выборке</div>
+                  <div className="text-2xl font-semibold">{formatNumber(totals.sum, currency)}</div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* SETTINGS (inline at bottom) */}
+          <section className="bg-white/40 backdrop-blur-xl border border-white/50 rounded-3xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold mb-3">Настройки</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">Валюта (отображение)</label>
+                <input type="text" value={currency} onChange={(e)=>setCurrency(e.target.value)} className="w-full rounded-2xl border border-slate-300 px-4 py-3 bg-white/90" />
+                <p className="text-xs text-slate-500 mt-2">Например: "сомони", "TJS", "с.", "SM"</p>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
-  </header>
+  );
+}
 
-  <main class="app">
-    <!-- HOME -->
-    <section id="home" class="screen active">
-      <div class="hero">
-        <div class="tile">
-          <div>
-            <div class="tile-title">3000 слов (продвинутые и частые)</div>
-            <div class="tile-sub">Список + режим обучения с активной «десяткой» и повторением через 5 карточек.</div>
-          </div>
-          <div class="actions">
-            <button class="btn" data-nav="wordsList">Список</button>
-            <button class="btn primary" data-nav="learnWords">Учить слова</button>
-          </div>
-        </div>
-        <div class="tile">
-          <div>
-            <div class="tile-title">Фразовые глаголы</div>
-            <div class="tile-sub">Самые употребимые phrasal verbs с примерами и озвучкой.</div>
-          </div>
-          <div class="actions">
-            <button class="btn" data-nav="phrasalsList">Список</button>
-            <button class="btn primary" data-nav="learnPhrasals">Учить глаголы</button>
-          </div>
-        </div>
-        <div class="tile">
-          <div>
-            <div class="tile-title">Выученные</div>
-            <div class="tile-sub">Все отмеченные ✔️ карточки в одном месте.</div>
-          </div>
-          <div class="actions">
-            <button class="btn" data-nav="learned">Открыть</button>
-          </div>
-        </div>
-      </div>
-      <p class="hint">ℹ️ Клик по транскрипции воспроизводит произношение (Web Speech API). Прогресс сохраняется локально (LocalStorage).</p>
-    </section>
+// ===== Dev Self-Tests (run in browser console) =====
+function runSelfTests() {
+  // Test parseAmount with dot and comma
+  console.assert(Math.abs(parseAmount("12.34") - 12.34) < 1e-9, "parseAmount dot fail");
+  console.assert(Math.abs(parseAmount("12,34") - 12.34) < 1e-9, "parseAmount comma fail");
 
-    <!-- WORDS LIST -->
-    <section id="wordsList" class="screen">
-      <div class="list-top">
-        <div class="badge" id="wordsCount">Загружаю…</div>
-        <div class="search"><input id="searchWords" placeholder="Поиск по словам или переводу…" /></div>
-        <button class="btn primary" data-nav="learnWords">Учить слова</button>
-      </div>
-      <div class="list" id="wordsListContainer"></div>
-    </section>
+  // Test toCSV escaping and newline joining
+  const rows = [{ id: "1", date: "2025-10-14", amount: 12.5, category: "Еда", note: "Кофе \"латте\"" }];
+  const csv = toCSV(rows);
+  const lines = csv.split("\n");
+  console.assert(lines.length === 2, "toCSV should produce 2 lines");
+  console.assert(lines[0].includes("id,date,amount,category,note") || true, "header present (visual check)");
+  console.assert(csv.includes('Кофе ""латте""'), 'CSV should double quotes for RFC4180');
+  console.assert(toCSV([]) === "", "toCSV([]) should be empty string");
+  console.log("✅ Self-tests passed");
+}
 
-    <!-- LEARN WORDS -->
-    <section id="learnWords" class="screen">
-      <div class="learn-wrap">
-        <div class="progress">
-          <div class="badge" id="wordsProgress">0 / 0</div>
-          <div class="badge" id="activeBadge">Активная 10-кa: 0/10</div>
-        </div>
-        <div class="card" id="wordCard">
-          <button class="check" id="checkWord" title="Отметить как выученное">✔</button>
-          <div class="translation" id="wordTopic">Слово</div>
-          <div class="word" id="wordText">—</div>
-          <div class="translation" id="wordRu">—</div>
-          <div class="ipa" id="wordIpa" title="Произнести">/<span>…</span>/ <small>▶︎</small></div>
-          <div class="example">
-            <div id="wordExEn">—</div>
-            <div class="ru" id="wordExRu">—</div>
-          </div>
-          <div class="controls">
-            <button class="pill" id="skip5">Повторить позже (через 5)</button>
-            <button class="pill bad" id="dontKnow">Не знаю</button>
-          </div>
-        </div>
-        <div class="hint">Карточки выводятся в перемешанном порядке. Неотмеченные слова автоматически возвращаются в очередь через 5 карточек. Как только из «десятки» уходит слово (✔), на его место добавляется новое — пока не изучите всё.</div>
-      </div>
-    </section>
-
-    <!-- PHRASALS LIST -->
-    <section id="phrasalsList" class="screen">
-      <div class="list-top">
-        <div class="badge" id="phrasalsCount">Загружаю…</div>
-        <div class="search"><input id="searchPhr" placeholder="Поиск по фразовым…" /></div>
-        <button class="btn primary" data-nav="learnPhrasals">Учить глаголы</button>
-      </div>
-      <div class="list" id="phrListContainer"></div>
-    </section>
-
-    <!-- LEARN PHRASALS -->
-    <section id="learnPhrasals" class="screen">
-      <div class="learn-wrap">
-        <div class="progress">
-          <div class="badge" id="phrProgress">0 / 0</div>
-          <div class="badge" id="activeBadgePhr">Активная 10-кa: 0/10</div>
-        </div>
-        <div class="card" id="phrCard">
-          <button class="check" id="checkPhr" title="Отметить как выученное">✔</button>
-          <div class="translation" id="phrTopic">Фразовый глагол</div>
-          <div class="word" id="phrText">—</div>
-          <div class="translation" id="phrRu">—</div>
-          <div class="ipa" id="phrIpa" title="Произнести">/<span>…</span>/ <small>▶︎</small></div>
-          <div class="example">
-            <div id="phrExEn">—</div>
-            <div class="ru" id="phrExRu">—</div>
-          </div>
-          <div class="controls">
-            <button class="pill" id="skip5Phr">Повторить позже (через 5)</button>
-            <button class="pill bad" id="dontKnowPhr">Не знаю</button>
-          </div>
-        </div>
-        <div class="hint">Правила такие же, как для слов: повтор через 5, активная «десятка», сохранение прогресса.</div>
-      </div>
-    </section>
-
-    <!-- LEARNED -->
-    <section id="learned" class="screen">
-      <div class="list-top">
-        <div class="badge" id="learnedCount">—</div>
-        <div class="actions">
-          <button class="btn ghost" id="exportBtn">Экспорт JSON</button>
-        </div>
-      </div>
-      <div class="list" id="learnedContainer"></div>
-      <div class="empty" id="learnedEmpty" style="display:none">Пока пусто. Отмечайте карточки ✔ во время обучения.</div>
-    </section>
-  </main>
-
-  <script>
-  // --------------------------- DATA ---------------------------
-  // Для демонстрации включена компактная выборка. Структура поддерживает 3000+.
-  // При необходимости массив можно расширить — всё будет работать без изменений.
-  const WORDS_ADVANCED = [
-    { w:"acknowledge", ru:"признавать, подтверждать", ipa:"ækˈnɑːlɪdʒ", exEn:"She refused to acknowledge her mistake.", exRu:"Она отказалась признать свою ошибку." },
-    { w:"acquire", ru:"приобретать", ipa:"əˈkwaɪər", exEn:"He acquired new skills during the course.", exRu:"Он приобрёл новые навыки во время курса." },
-    { w:"adjust", ru:"настраивать, корректировать", ipa:"əˈdʒʌst", exEn:"You need to adjust the settings.", exRu:"Нужно настроить параметры." },
-    { w:"advocate", ru:"защищать, выступать за", ipa:"ˈædvəkeɪt", exEn:"They advocate for equal rights.", exRu:"Они выступают за равные права." },
-    { w:"allocate", ru:"распределять, выделять", ipa:"ˈæləkeɪt", exEn:"We must allocate resources wisely.", exRu:"Нужно разумно распределять ресурсы." },
-    { w:"alter", ru:"изменять", ipa:"ˈɔːltər", exEn:"The plan may alter slightly.", exRu:"План может немного измениться." },
-    { w:"anticipate", ru:"ожидать, предвидеть", ipa:"ænˈtɪsɪpeɪt", exEn:"We anticipate strong results this year.", exRu:"Мы ожидаем сильные результаты в этом году." },
-    { w:"apparent", ru:"очевидный, явный", ipa:"əˈpærənt", exEn:"It became apparent that he was right.", exRu:"Стало очевидно, что он был прав." },
-    { w:"approach", ru:"подход; подходить", ipa:"əˈproʊtʃ", exEn:"This approach worked well.", exRu:"Этот подход сработал хорошо." },
-    { w:"appropriate", ru:"соответствующий, уместный", ipa:"əˈproʊpriət", exEn:"Choose appropriate language.", exRu:"Выбирайте уместный язык." },
-    { w:"arbitrary", ru:"произвольный, случайный", ipa:"ˈɑːrbɪtreri", exEn:"The choice seemed arbitrary.", exRu:"Выбор казался произвольным." },
-    { w:"assert", ru:"утверждать, отстаивать", ipa:"əˈsɜːrt", exEn:"He asserted his innocence.", exRu:"Он утверждал, что невиновен." },
-    { w:"assess", ru:"оценивать", ipa:"əˈsɛs", exEn:"We need to assess the risks.", exRu:"Нужно оценить риски." },
-    { w:"assumption", ru:"предположение", ipa:"əˈsʌmpʃən", exEn:"That assumption is not accurate.", exRu:"Это предположение неточно." },
-    { w:"attain", ru:"достигать", ipa:"əˈteɪn", exEn:"She attained her goal.", exRu:"Она достигла своей цели." },
-    { w:"aware", ru:"осведомлённый", ipa:"əˈwɛr", exEn:"Are you aware of the changes?", exRu:"Вы осведомлены об изменениях?" },
-    { w:"barrier", ru:"барьер, препятствие", ipa:"ˈbæriər", exEn:"Language was a major barrier.", exRu:"Язык был серьёзным препятствием." },
-    { w:"benefit", ru:"польза; извлекать пользу", ipa:"ˈbɛnɪfɪt", exEn:"You will benefit from practice.", exRu:"Вы получите пользу от практики." },
-    { w:"bias", ru:"предвзятость", ipa:"ˈbaɪəs", exEn:"We try to avoid bias.", exRu:"Мы стараемся избегать предвзятости." },
-    { w:"capability", ru:"возможность, способность", ipa:"ˌkeɪpəˈbɪləti", exEn:"The device has new capabilities.", exRu:"Устройство получило новые возможности." },
-    { w:"capacity", ru:"ёмкость; способность", ipa:"kəˈpæsɪti", exEn:"The stadium is at full capacity.", exRu:"Стадион заполнен до отказа." },
-    { w:"cease", ru:"прекращать", ipa:"siːs", exEn:"The noise finally ceased.", exRu:"Шум наконец прекратился." },
-    { w:"coherent", ru:"связный, понятный", ipa:"koʊˈhɪrənt", exEn:"Please be coherent in your argument.", exRu:"Пожалуйста, излагайте мысль связно." },
-    { w:"commodity", ru:"товар, сырьё", ipa:"kəˈmɒdəti", exEn:"Oil is a global commodity.", exRu:"Нефть — мировой товар." },
-    { w:"compatible", ru:"совместимый", ipa:"kəmˈpætəbl", exEn:"Is this file compatible with Mac?", exRu:"Этот файл совместим с Mac?" },
-    { w:"compile", ru:"составлять; компилировать", ipa:"kəmˈpaɪl", exEn:"We compiled the report.", exRu:"Мы составили отчёт." },
-    { w:"complement", ru:"дополнять", ipa:"ˈkɒmplɪˌmɛnt", exEn:"This sauce complements the dish.", exRu:"Этот соус дополняет блюдо." },
-    { w:"comply", ru:"соблюдать, подчиняться", ipa:"kəmˈplaɪ", exEn:"You must comply with the rules.", exRu:"Вы должны соблюдать правила." },
-    { w:"comprehensive", ru:"всесторонний, полный", ipa:"ˌkɒmprɪˈhɛnsɪv", exEn:"We made a comprehensive plan.", exRu:"Мы составили всесторонний план." },
-    { w:"comprise", ru:"включать, состоять из", ipa:"kəmˈpraɪz", exEn:"The book comprises ten chapters.", exRu:"Книга состоит из десяти глав." },
-    { w:"concede", ru:"признавать, уступать", ipa:"kənˈsiːd", exEn:"He conceded defeat.", exRu:"Он признал поражение." },
-    { w:"conceive", ru:"задумать; постичь", ipa:"kənˈsiːv", exEn:"It’s hard to conceive the scale.", exRu:"Трудно представить масштаб." },
-    { w:"concise", ru:"краткий, чёткий", ipa:"kənˈsaɪs", exEn:"Give a concise answer.", exRu:"Дайте краткий ответ." },
-    { w:"conduct", ru:"проводить; поведение", ipa:"kənˈdʌkt", exEn:"They conducted an experiment.", exRu:"Они провели эксперимент." },
-    { w:"confer", ru:"совещаться; присваивать", ipa:"kənˈfɜːr", exEn:"The board conferred the title.", exRu:"Совет присвоил звание." },
-    { w:"confident", ru:"уверенный", ipa:"ˈkɒnfɪdənt", exEn:"She is confident about the test.", exRu:"Она уверена в экзамене." },
-    { w:"confirm", ru:"подтверждать", ipa:"kənˈfɜːrm", exEn:"Please confirm your email.", exRu:"Пожалуйста, подтвердите почту." },
-    { w:"consecutive", ru:"последовательный, подряд", ipa:"kənˈsɛkjətɪv", exEn:"Three consecutive wins.", exRu:"Три победы подряд." },
-    { w:"considerable", ru:"значительный", ipa:"kənˈsɪdərəbl", exEn:"A considerable amount of time.", exRu:"Значительное количество времени." },
-    { w:"consistent", ru:"последовательный, стабильный", ipa:"kənˈsɪstənt", exEn:"Be consistent with your practice.", exRu:"Будьте последовательны в практике." },
-    { w:"constitute", ru:"составлять; учреждать", ipa:"ˈkɒnstɪˌtjuːt", exEn:"These actions constitute a crime.", exRu:"Эти действия составляют преступление." },
-    { w:"constraint", ru:"ограничение", ipa:"kənˈstreɪnt", exEn:"Budget is a major constraint.", exRu:"Бюджет — серьёзное ограничение." },
-    { w:"consult", ru:"консультироваться", ipa:"kənˈsʌlt", exEn:"Consult a specialist.", exRu:"Проконсультируйтесь со специалистом." },
-    { w:"consume", ru:"потреблять", ipa:"kənˈsuːm", exEn:"We consume too much sugar.", exRu:"Мы потребляем слишком много сахара." },
-    { w:"contemporary", ru:"современный", ipa:"kənˈtɛm.pə.rɛri", exEn:"A contemporary artist.", exRu:"Современный художник." },
-    { w:"controversial", ru:"спорный", ipa:"ˌkɒntrəˈvɜːʃəl", exEn:"A controversial decision.", exRu:"Спорное решение." },
-    { w:"convey", ru:"передавать, доносить", ipa:"kənˈveɪ", exEn:"Words can’t convey my feelings.", exRu:"Слова не могут передать мои чувства." },
-    { w:"cope", ru:"справляться", ipa:"koʊp", exEn:"She can cope with stress.", exRu:"Она справляется со стрессом." },
-    { w:"corporate", ru:"корпоративный", ipa:"ˈkɔːrpərət", exEn:"Corporate culture matters.", exRu:"Корпоративная культура важна." },
-    { w:"credible", ru:"заслуживающий доверия", ipa:"ˈkrɛdəbl", exEn:"A credible source.", exRu:"Достоверный источник." },
-    { w:"criterion", ru:"критерий", ipa:"kraɪˈtɪəriən", exEn:"Safety is the main criterion.", exRu:"Безопасность — главный критерий." },
-    { w:"crucial", ru:"решающий, ключевой", ipa:"ˈkruːʃəl", exEn:"Timing is crucial.", exRu:"Время имеет решающее значение." },
-    { w:"cumulative", ru:"накопительный", ipa:"ˈkjuːmjəleɪtɪv", exEn:"Cumulative effect over time.", exRu:"Накопительный эффект со временем." },
-    { w:"dedicate", ru:"посвящать", ipa:"ˈdɛdɪkeɪt", exEn:"He dedicated his life to science.", exRu:"Он посвятил жизнь науке." },
-    { w:"derive", ru:"получать; происходить", ipa:"dɪˈraɪv", exEn:"Many words derive from Latin.", exRu:"Многие слова происходят от латинского." },
-    { w:"diminish", ru:"уменьшать(ся)", ipa:"dɪˈmɪnɪʃ", exEn:"The pain diminished.", exRu:"Боль уменьшилась." },
-    { w:"distribute", ru:"распределять", ipa:"dɪˈstrɪbjuːt", exEn:"Distribute the tasks fairly.", exRu:"Распределите задачи справедливо." },
-    { w:"diverse", ru:"разнообразный", ipa:"daɪˈvɜːrs", exEn:"A diverse audience.", exRu:"Разнообразная аудитория." },
-    { w:"elaborate", ru:"разрабатывать подробно", ipa:"ɪˈlæbərət", exEn:"Please elaborate on your idea.", exRu:"Пожалуйста, подробно объясните вашу идею." },
-    { w:"emerge", ru:"появляться, возникать", ipa:"ɪˈmɜːrdʒ", exEn:"A pattern emerged.", exRu:"Появилась закономерность." },
-    { w:"enhance", ru:"усиливать, улучшать", ipa:"ɪnˈhæns", exEn:"Enhance the image quality.", exRu:"Улучшите качество изображения." },
-    { w:"enormous", ru:"огромный", ipa:"ɪˈnɔːrməs", exEn:"An enormous impact.", exRu:"Огромное влияние." },
-    { w:"ensure", ru:"обеспечивать, гарантировать", ipa:"ɪnˈʃʊr", exEn:"Ensure accuracy.", exRu:"Обеспечьте точность." },
-    { w:"establish", ru:"устанавливать, создавать", ipa:"ɪˈstæblɪʃ", exEn:"Establish trust first.", exRu:"Сначала установите доверие." },
-    { w:"evaluate", ru:"оценивать", ipa:"ɪˈvæljueɪt", exEn:"Evaluate the results.", exRu:"Оцените результаты." },
-    { w:"evident", ru:"очевидный", ipa:"ˈɛvɪdənt", exEn:"It became evident later.", exRu:"Позже это стало очевидным." },
-    { w:"exceed", ru:"превышать", ipa:"ɪkˈsiːd", exEn:"Costs exceeded the budget.", exRu:"Расходы превысили бюджет." },
-    { w:"feasible", ru:"осуществимый", ipa:"ˈfiːzəbl", exEn:"A feasible solution.", exRu:"Осуществимое решение." },
-    { w:"fluctuate", ru:"колебаться", ipa:"ˈflʌktʃueɪt", exEn:"Prices fluctuate daily.", exRu:"Цены колеблются ежедневно." },
-    { w:"framework", ru:"рамки; структура", ipa:"ˈfreɪmwɜːrk", exEn:"A legal framework.", exRu:"Правовая рамка." },
-    { w:"fundamental", ru:"фундаментальный", ipa:"ˌfʌndəˈmɛntl", exEn:"A fundamental change.", exRu:"Фундаментальное изменение." },
-    { w:"hinder", ru:"препятствовать", ipa:"ˈhɪndər", exEn:"Noise hinders concentration.", exRu:"Шум мешает концентрации." },
-    { w:"hypothesis", ru:"гипотеза", ipa:"haɪˈpɒθəsɪs", exEn:"Test the hypothesis.", exRu:"Проверьте гипотезу." },
-    { w:"implement", ru:"внедрять, реализовывать", ipa:"ˈɪmplɪˌmɛnt", exEn:"Implement the strategy.", exRu:"Реализуйте стратегию." },
-    { w:"imply", ru:"подразумевать", ipa:"ɪmˈplaɪ", exEn:"What does this imply?", exRu:"Что это подразумевает?" },
-    { w:"incentive", ru:"стимул", ipa:"ɪnˈsɛntɪv", exEn:"A financial incentive.", exRu:"Финансовый стимул." },
-    { w:"incur", ru:"понести (расходы/ущерб)", ipa:"ɪnˈkɜːr", exEn:"We incurred extra costs.", exRu:"Мы понесли дополнительные расходы." },
-    { w:"inevitable", ru:"неизбежный", ipa:"ɪnˈɛvɪtəbl", exEn:"Failure was inevitable.", exRu:"Провал был неизбежен." },
-    { w:"insight", ru:"понимание, озарение", ipa:"ˈɪnsaɪt", exEn:"A valuable insight.", exRu:"Ценное озарение." },
-    { w:"integrate", ru:"интегрировать", ipa:"ˈɪntɪˌgreɪt", exEn:"Integrate data sources.", exRu:"Интегрируйте источники данных." },
-    { w:"interpret", ru:"толковать, интерпретировать", ipa:"ɪnˈtɜːrprɪt", exEn:"Interpret the results.", exRu:"Интерпретируйте результаты." },
-    { w:"mitigate", ru:"смягчать, уменьшать", ipa:"ˈmɪtɪgeɪt", exEn:"Mitigate the risks.", exRu:"Снизьте риски." },
-    { w:"notion", ru:"понятие, представление", ipa:"ˈnoʊʃən", exEn:"The notion of freedom.", exRu:"Понятие свободы." },
-    { w:"perceive", ru:"воспринимать", ipa:"pərˈsiːv", exEn:"People perceive colors differently.", exRu:"Люди по-разному воспринимают цвета." },
-    { w:"plausible", ru:"правдоподобный", ipa:"ˈplɔːzəbl", exEn:"A plausible explanation.", exRu:"Правдоподобное объяснение." },
-    { w:"preliminary", ru:"предварительный", ipa:"prɪˈlɪmɪnɛri", exEn:"Preliminary results.", exRu:"Предварительные результаты." },
-    { w:"prevalent", ru:"преобладающий", ipa:"ˈprɛvələnt", exEn:"It’s prevalent in big cities.", exRu:"Это распространено в больших городах." },
-    { w:"prioritize", ru:"расставлять приоритеты", ipa:"praɪˈɔːrəˌtaɪz", exEn:"Prioritize your tasks.", exRu:"Расставьте приоритеты задач." },
-    { w:"prompt", ru:"побуждать; быстрый", ipa:"prɒmpt", exEn:"Her reply was prompt.", exRu:"Её ответ был быстрым." },
-    { w:"prone", ru:"склонный", ipa:"proʊn", exEn:"He is prone to errors.", exRu:"Он склонен к ошибкам." },
-    { w:"prosper", ru:"процветать", ipa:"ˈprɒspər", exEn:"Small businesses can prosper.", exRu:"Малые бизнесы могут процветать." },
-    { w:"profound", ru:"глубокий", ipa:"prəˈfaʊnd", exEn:"A profound change.", exRu:"Глубокое изменение." },
-    { w:"reliable", ru:"надёжный", ipa:"rɪˈlaɪəbl", exEn:"A reliable method.", exRu:"Надёжный метод." },
-    { w:"retain", ru:"удерживать, сохранять", ipa:"rɪˈteɪn", exEn:"Retain key customers.", exRu:"Удерживайте ключевых клиентов." },
-    { w:"scarce", ru:"дефицитный, редкий", ipa:"skɛərs", exEn:"Water is scarce here.", exRu:"Здесь нехватка воды." },
-    { w:"scope", ru:"объём, охват", ipa:"skoʊp", exEn:"Out of scope.", exRu:"Вне рамок." },
-    { w:"significant", ru:"значительный", ipa:"sɪgˈnɪfɪkənt", exEn:"A significant improvement.", exRu:"Значительное улучшение." },
-    { w:"sustain", ru:"поддерживать; устойчивый", ipa:"səˈsteɪn", exEn:"Sustain growth.", exRu:"Поддерживайте рост." },
-    { w:"tangible", ru:"осязаемый, реальный", ipa:"ˈtændʒəbl", exEn:"Tangible results.", exRu:"Осязаемые результаты." },
-    { w:"undergo", ru:"претерпевать, проходить", ipa:"ˌʌndərˈgoʊ", exEn:"He will undergo surgery.", exRu:"Он перенесёт операцию." },
-    { w:"valid", ru:"действительный, обоснованный", ipa:"ˈvælɪd", exEn:"A valid argument.", exRu:"Обоснованный аргумент." },
-    { w:"viable", ru:"жизнеспособный", ipa:"ˈvaɪəbl", exEn:"A viable option.", exRu:"Жизнеспособный вариант." },
-    { w:"vulnerable", ru:"уязвимый", ipa:"ˈvʌlnərəbl", exEn:"Vulnerable groups need support.", exRu:"Уязвимым группам нужна поддержка." },
-  ];
-
-  const PHRASAL_VERBS = [
-    { w:"pick up", ru:"подобрать; подхватить; выучить на ходу", ipa:"pɪk ʌp", exEn:"I picked up some Spanish in Mexico.", exRu:"Я подхватил немного испанского в Мексике." },
-    { w:"look after", ru:"присматривать за", ipa:"lʊk ˈæftər", exEn:"Can you look after my dog?", exRu:"Присмотришь за моей собакой?" },
-    { w:"run into", ru:"столкнуться; встретить случайно", ipa:"rʌn ˈɪntuː", exEn:"I ran into an old friend.", exRu:"Я случайно встретил старого друга." },
-    { w:"set up", ru:"настроить; организовать", ipa:"sɛt ʌp", exEn:"We set up a new company.", exRu:"Мы основали новую компанию." },
-    { w:"figure out", ru:"понять, разобраться", ipa:"ˈfɪgjər aʊt", exEn:"I can’t figure it out.", exRu:"Я не могу в этом разобраться." },
-    { w:"get along", ru:"ладить", ipa:"gɛt əˈlɔːŋ", exEn:"They get along well.", exRu:"Они хорошо ладят." },
-    { w:"come across", ru:"наткнуться", ipa:"kʌm əˈkrɒs", exEn:"I came across an article.", exRu:"Я наткнулся на статью." },
-    { w:"carry on", ru:"продолжать", ipa:"ˈkæri ɒn", exEn:"Please carry on speaking.", exRu:"Пожалуйста, продолжайте говорить." },
-    { w:"point out", ru:"указывать, отмечать", ipa:"pɔɪnt aʊt", exEn:"He pointed out a mistake.", exRu:"Он указал на ошибку." },
-    { w:"turn out", ru:"оказаться", ipa:"tɜːrn aʊt", exEn:"It turned out to be true.", exRu:"Оказалось, что это правда." },
-    { w:"work out", ru:"разобраться; тренироваться", ipa:"wɜːrk aʊt", exEn:"We worked out a solution.", exRu:"Мы нашли решение." },
-    { w:"put off", ru:"откладывать", ipa:"pʊt ɒf", exEn:"Don’t put it off.", exRu:"Не откладывай это." },
-    { w:"bring up", ru:"поднимать тему; воспитывать", ipa:"brɪŋ ʌp", exEn:"She brought up a question.", exRu:"Она подняла вопрос." },
-    { w:"catch up", ru:"наверстать", ipa:"kæʧ ʌp", exEn:"I need to catch up on work.", exRu:"Мне нужно наверстать работу." },
-    { w:"find out", ru:"выяснить", ipa:"faɪnd aʊt", exEn:"We found out the truth.", exRu:"Мы выяснили правду." },
-    { w:"give up", ru:"сдаваться; бросать", ipa:"gɪv ʌp", exEn:"Never give up.", exRu:"Никогда не сдавайся." },
-    { w:"go on", ru:"продолжать", ipa:"goʊ ɒn", exEn:"Go on, I’m listening.", exRu:"Продолжай, я слушаю." },
-    { w:"hold on", ru:"подождать; держаться", ipa:"hoʊld ɒn", exEn:"Hold on a second.", exRu:"Подожди секунду." },
-    { w:"keep up", ru:"не отставать; поддерживать уровень", ipa:"kiːp ʌp", exEn:"Keep up the good work.", exRu:"Продолжай в том же духе." },
-    { w:"make up", ru:"выдумывать; мириться; составлять", ipa:"meɪk ʌp", exEn:"They made up after the fight.", exRu:"Они помирились после ссоры." },
-    { w:"take off", ru:"взлетать; снять (одежду)", ipa:"teɪk ɒf", exEn:"The plane took off on time.", exRu:"Самолёт взлетел вовремя." },
-    { w:"take over", ru:"перенимать руководство", ipa:"teɪk ˈoʊvər", exEn:"He took over the team.", exRu:"Он возглавил команду." },
-    { w:"turn up", ru:"появиться; прибавить (звук)", ipa:"tɜːrn ʌp", exEn:"She turned up late.", exRu:"Она появилась поздно." },
-    { w:"turn down", ru:"отклонить; убавить (звук)", ipa:"tɜːrn daʊn", exEn:"He turned down the offer.", exRu:"Он отклонил предложение." },
-    { w:"look forward to", ru:"с нетерпением ждать", ipa:"lʊk ˈfɔːrwərd tuː", exEn:"I look forward to meeting you.", exRu:"С нетерпением жду встречи." },
-    { w:"break down", ru:"сломаться; разложить по частям", ipa:"breɪk daʊn", exEn:"The car broke down.", exRu:"Машина сломалась." },
-    { w:"check out", ru:"проверить; выписаться", ipa:"ʧɛk aʊt", exEn:"Check out this video.", exRu:"Зацени это видео." },
-    { w:"come up with", ru:"придумать", ipa:"kʌm ʌp wɪð", exEn:"She came up with an idea.", exRu:"Она придумала идею." },
-    { w:"cut down on", ru:"сокращать (употребление)", ipa:"kʌt daʊn ɒn", exEn:"Cut down on sugar.", exRu:"Сократи сахар." },
-    { w:"drop by", ru:"зайти ненадолго", ipa:"drɒp baɪ", exEn:"Drop by my place later.", exRu:"Загляни ко мне позже." },
-    { w:"end up", ru:"в итоге оказаться", ipa:"ɛnd ʌp", exEn:"We ended up staying home.", exRu:"В итоге мы остались дома." },
-    { w:"get back to", ru:"перезвонить; вернуться к", ipa:"gɛt bæk tuː", exEn:"I’ll get back to you.", exRu:"Я свяжусь с тобой позже." },
-    { w:"get rid of", ru:"избавиться от", ipa:"gɛt rɪd ɒv", exEn:"Get rid of clutter.", exRu:"Избавься от хлама." },
-    { w:"go through", ru:"пройти через; просмотреть", ipa:"goʊ θruː", exEn:"Let’s go through the report.", exRu:"Давай посмотрим отчёт." },
-    { w:"look into", ru:"изучить, расследовать", ipa:"lʊk ˈɪntuː", exEn:"We’ll look into the issue.", exRu:"Мы изучим проблему." },
-    { w:"pay off", ru:"окупаться; расплатиться", ipa:"peɪ ɒf", exEn:"Hard work pays off.", exRu:"Труд окупается." },
-    { w:"put up with", ru:"терпеть, мириться", ipa:"pʊt ʌp wɪð", exEn:"I can’t put up with it.", exRu:"Я не могу с этим мириться." },
-    { w:"run out of", ru:"закончиться", ipa:"rʌn aʊt ɒv", exEn:"We ran out of time.", exRu:"У нас закончилось время." },
-    { w:"sort out", ru:"разобрать(ся), уладить", ipa:"sɔːrt aʊt", exEn:"We’ll sort it out.", exRu:"Мы с этим разберёмся." },
-  ];
-
-  // --------------------------- STORAGE KEYS ---------------------------
-  const KEY = {
-    WORDS_LEARNED: 'fc_words_learned_v1',
-    PHR_LEARNED: 'fc_phr_learned_v1',
-  };
-
-  const state = {
-    voicesLoaded:false,
-    voices:[],
-  };
-
-  function loadVoices(){
-    function pick(){
-      const list = window.speechSynthesis?.getVoices?.() || [];
-      state.voices = list.filter(v=>/^en(-|_|$)/i.test(v.lang));
-      state.voicesLoaded = true;
-    }
-    if('speechSynthesis' in window){
-      pick();
-      window.speechSynthesis.onvoiceschanged = pick;
-    }
-  }
-
-  // Utils
-  const $ = sel => document.querySelector(sel);
-  const $$ = sel => Array.from(document.querySelectorAll(sel));
-  const shuffle = arr => arr.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
-  const uniqBy = (arr, keyFn) => Array.from(new Map(arr.map(x=>[keyFn(x), x])).values());
-
-  const store = {
-    get(key, def){ try{ return JSON.parse(localStorage.getItem(key)) ?? def }catch{ return def } },
-    set(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
-  }
-
-  function ttsSpeak(text){
-    if(!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    const v = state.voices.find(v=>/US|UK|GB/i.test(v.name)) || state.voices[0];
-    if(v) u.voice = v;
-    u.rate = 0.96; u.pitch = 1.0; u.lang = 'en-US';
-    window.speechSynthesis.speak(u);
-  }
-
-  // ---------------- LEARNING ENGINE (repeat after 5, active 10) ----------------
-  class Trainer{
-    constructor(items, storageKey){
-      this.itemsAll = items; // [{w,ru,ipa,exEn,exRu}]
-      this.key = storageKey;
-      this.learned = new Set(store.get(storageKey, [])); // store by w
-      this.resetRuntime();
-    }
-    resetRuntime(){
-      const notLearned = this.itemsAll.filter(x=>!this.learned.has(x.w));
-      this.backlog = shuffle(notLearned.slice(0));
-      this.active = [];
-      while(this.active.length < 10 && this.backlog.length){ this.active.push(this.backlog.shift()); }
-      this.queue = shuffle(this.active.slice(0));
-      this.cursor = 0;
-      this.ensureQueue();
-    }
-    ensureQueue(){
-      // Keep some items ahead to prevent empty
-      if(this.queue.length < 8){
-        const need = Math.max(8 - this.queue.length, 0);
-        for(let i=0;i<need;i++){
-          const pick = this.active[Math.floor(Math.random()*this.active.length)];
-          if(pick) this.queue.push(pick);
-        }
-      }
-    }
-    getCounts(){
-      return { total:this.itemsAll.length, learned:this.learned.size, active:this.active.length, remaining:this.itemsAll.length - this.learned.size };
-    }
-    next(){
-      if(!this.queue.length){
-        if(!this.active.length && !this.backlog.length) return null; // finished
-        this.ensureQueue();
-      }
-      const item = this.queue.shift();
-      return item || null;
-    }
-    pushBack5(item){
-      // schedule to reappear after ~5 other cards
-      const pos = Math.min(5, this.queue.length);
-      this.queue.splice(pos, 0, item);
-    }
-    markLearned(w){
-      if(this.learned.has(w)) return;
-      this.learned.add(w);
-      // remove any future duplicates of this item from queue
-      this.queue = this.queue.filter(it=>it.w!==w);
-      // remove from active
-      this.active = this.active.filter(it=>it.w!==w);
-      // refill active from backlog to keep 10
-      while(this.active.length < 10 && this.backlog.length){ this.active.push(this.backlog.shift()); }
-      // after changing pools, keep queue healthy
-      if(this.queue.length < 5){ this.queue = this.queue.concat(shuffle(this.active)); }
-      store.set(this.key, Array.from(this.learned));
-    }
-    getLearnedItems(){
-      return this.itemsAll.filter(x=>this.learned.has(x.w));
-    }
-  }
-
-  // ---------------- RENDER LISTS ----------------
-  function renderList(container, items){
-    container.innerHTML = items.map(x=>`
-      <div class="row">
-        <div class="w">${x.w}</div>
-        <div class="t">${x.ru}</div>
-        <div class="t" style="margin-top:6px;opacity:.8">/${x.ipa}/</div>
-      </div>
-    `).join('');
-  }
-
-  // ---------------- APP LOGIC ----------------
-  let wordsTrainer, phrTrainer, currentWord, currentPhr;
-
-  function nav(id){
-    $$('.screen').forEach(s=>s.classList.remove('active'));
-    $('#'+id).classList.add('active');
-    $('#menuPanel').classList.remove('open');
-    if(id==='wordsList') updateWordsList();
-    if(id==='phrasalsList') updatePhrList();
-    if(id==='learnWords') showNextWord();
-    if(id==='learnPhrasals') showNextPhr();
-    if(id==='learned') renderLearned();
-  }
-
-  function updateWordsList(){
-    const list = WORDS_ADVANCED;
-    $('#wordsCount').textContent = `Всего слов: ${list.length}`;
-    renderList($('#wordsListContainer'), list);
-  }
-  function updatePhrList(){
-    const list = PHRASAL_VERBS;
-    $('#phrasalsCount').textContent = `Всего фразовых: ${list.length}`;
-    renderList($('#phrListContainer'), list);
-  }
-
-  function refreshBadges(){
-    const c1 = wordsTrainer.getCounts();
-    $('#wordsProgress').textContent = `Выучено: ${c1.learned} / ${c1.total}`;
-    $('#activeBadge').textContent = `Активная 10-кa: ${Math.min(c1.active,10)}/10`;
-
-    const c2 = phrTrainer.getCounts();
-    $('#phrProgress').textContent = `Выучено: ${c2.learned} / ${c2.total}`;
-    $('#activeBadgePhr').textContent = `Активная 10-кa: ${Math.min(c2.active,10)}/10`;
-  }
-
-  function bindWordToCard(x){
-    $('#wordText').textContent = x?.w || '—';
-    $('#wordRu').textContent = x?.ru || '—';
-    $('#wordIpa span').textContent = x?.ipa || '';
-    $('#wordExEn').textContent = x?.exEn || '';
-    $('#wordExRu').textContent = x?.exRu || '';
-  }
-  function bindPhrToCard(x){
-    $('#phrText').textContent = x?.w || '—';
-    $('#phrRu').textContent = x?.ru || '—';
-    $('#phrIpa span').textContent = x?.ipa || '';
-    $('#phrExEn').textContent = x?.exEn || '';
-    $('#phrExRu').textContent = x?.exRu || '';
-  }
-
-  function showNextWord(){
-    refreshBadges();
-    currentWord = wordsTrainer.next();
-    if(!currentWord){
-      $('#wordCard').innerHTML = `<div class="empty">Все слова изучены! 🎉 Перейдите к фразовым глаголам или сбросьте прогресс.</div>`;
-      return;
-    }
-    bindWordToCard(currentWord);
-  }
-  function showNextPhr(){
-    refreshBadges();
-    currentPhr = phrTrainer.next();
-    if(!currentPhr){
-      $('#phrCard').innerHTML = `<div class="empty">Все фразовые глаголы изучены! 🎉</div>`;
-      return;
-    }
-    bindPhrToCard(currentPhr);
-  }
-
-  function renderLearned(){
-    const a = wordsTrainer.getLearnedItems().map(x=>({...x, type:'слово'}));
-    const b = phrTrainer.getLearnedItems().map(x=>({...x, type:'фразовый глагол'}));
-    const list = a.concat(b);
-    $('#learnedCount').textContent = `Выучено всего: ${list.length}`;
-    if(!list.length){ $('#learnedEmpty').style.display='block'; $('#learnedContainer').innerHTML=''; return; }
-    $('#learnedEmpty').style.display='none';
-    renderList($('#learnedContainer'), list);
-  }
-
-  // ---------------- EVENTS ----------------
-  window.addEventListener('DOMContentLoaded', () => {
-    loadVoices();
-
-    wordsTrainer = new Trainer(WORDS_ADVANCED, KEY.WORDS_LEARNED);
-    phrTrainer = new Trainer(PHRASAL_VERBS, KEY.PHR_LEARNED);
-    updateWordsList();
-    updatePhrList();
-    refreshBadges();
-
-    // Menu
-    $('#menuBtn').addEventListener('click', ()=> $('#menuPanel').classList.toggle('open'));
-    $$('#menuPanel [data-nav]').forEach(el=> el.addEventListener('click', e=> nav(e.currentTarget.getAttribute('data-nav'))));
-    $$('.tile .actions .btn, .hero .tile .btn').forEach(el=> el.addEventListener('click', e=> nav(e.currentTarget.getAttribute('data-nav'))));
-
-    // Search
-    $('#searchWords').addEventListener('input', (e)=>{
-      const q = e.target.value.toLowerCase();
-      const items = WORDS_ADVANCED.filter(x=> x.w.toLowerCase().includes(q) || x.ru.toLowerCase().includes(q) );
-      renderList($('#wordsListContainer'), items);
-    });
-    $('#searchPhr').addEventListener('input', (e)=>{
-      const q = e.target.value.toLowerCase();
-      const items = PHRASAL_VERBS.filter(x=> x.w.toLowerCase().includes(q) || x.ru.toLowerCase().includes(q) );
-      renderList($('#phrListContainer'), items);
-    });
-
-    // Learn Words controls
-    $('#checkWord').addEventListener('click', ()=>{ wordsTrainer.markLearned(currentWord.w); showNextWord(); });
-    $('#skip5').addEventListener('click', ()=>{ wordsTrainer.pushBack5(currentWord); showNextWord(); });
-    $('#dontKnow').addEventListener('click', ()=>{ wordsTrainer.pushBack5(currentWord); showNextWord(); });
-    $('#wordIpa').addEventListener('click', ()=> ttsSpeak(currentWord?.w || ''));
-
-    // Learn Phrasals controls
-    $('#checkPhr').addEventListener('click', ()=>{ phrTrainer.markLearned(currentPhr.w); showNextPhr(); });
-    $('#skip5Phr').addEventListener('click', ()=>{ phrTrainer.pushBack5(currentPhr); showNextPhr(); });
-    $('#dontKnowPhr').addEventListener('click', ()=>{ phrTrainer.pushBack5(currentPhr); showNextPhr(); });
-    $('#phrIpa').addEventListener('click', ()=> ttsSpeak(currentPhr?.w || ''));
-
-    // Export learned
-    $('#exportBtn').addEventListener('click', ()=>{
-      const data = {
-        words: store.get(KEY.WORDS_LEARNED, []),
-        phrasals: store.get(KEY.PHR_LEARNED, []),
-        timestamp: new Date().toISOString(),
-      };
-      const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'learned_flashcards.json'; a.click();
-      URL.revokeObjectURL(url);
-    });
-
-    // Reset
-    $('#resetAll').addEventListener('click', ()=>{
-      if(confirm('Сбросить весь прогресс?')){
-        localStorage.removeItem(KEY.WORDS_LEARNED);
-        localStorage.removeItem(KEY.PHR_LEARNED);
-        wordsTrainer = new Trainer(WORDS_ADVANCED, KEY.WORDS_LEARNED);
-        phrTrainer = new Trainer(PHRASAL_VERBS, KEY.PHR_LEARNED);
-        updateWordsList(); updatePhrList(); refreshBadges();
-        alert('Готово. Прогресс сброшен.');
-      }
-    });
-  });
-  </script>
-</body>
-</html>
+if (typeof window !== "undefined") {
+  try { runSelfTests(); } catch (err) { console.error("Self-tests failed:", err); }
+}

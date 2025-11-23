@@ -45,14 +45,28 @@
     <div id="root"></div>
 
     <script type="text/babel">
+        // --- ОБРАБОТЧИК ОШИБОК (чтобы не было белого экрана) ---
+        window.onerror = function(message, source, lineno, colno, error) {
+            document.getElementById('root').innerHTML = `
+                <div style="padding: 20px; color: red; font-family: sans-serif;">
+                    <h2 style="font-weight: bold; margin-bottom: 10px;">Произошла ошибка 😔</h2>
+                    <p style="margin-bottom: 10px;">${message}</p>
+                    <p style="font-size: 12px; color: #666;">Строка: ${lineno}</p>
+                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #333; color: white; border: none; border-radius: 8px;">Перезагрузить</button>
+                </div>
+            `;
+        };
+
         // --- Получаем библиотеки из глобальной области видимости ---
         const { useState, useEffect, useMemo, useRef } = React;
+        
+        // Исправлено: lucideReact вместо LucideReact
         const { 
             PieChart, Wallet, BookOpen, Plus, Trash2, TrendingDown, TrendingUp, 
             Coffee, Car, Home, ShoppingBag, Activity, MoreHorizontal, 
             ChevronLeft, ChevronRight, Lightbulb, Sparkles, Loader2, X, 
             Mic, MicOff 
-        } = LucideReact;
+        } = lucideReact; 
 
         // --- Конфигурация API ---
         const apiKey = ""; // API ключ будет подставлен автоматически

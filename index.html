@@ -1,716 +1,570 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  PieChart, 
-  Wallet, 
-  BookOpen, 
-  Plus, 
-  Trash2, 
-  TrendingDown, 
-  TrendingUp, 
-  Coffee, 
-  Car, 
-  Home, 
-  ShoppingBag, 
-  Activity, 
-  MoreHorizontal,
-  ChevronLeft,
-  ChevronRight,
-  Lightbulb,
-  Sparkles,
-  Loader2,
-  X,
-  Mic,
-  MicOff
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Мой Бюджет</title>
+    
+    <!-- Подключаем стили Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Подключаем React и ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Подключаем Babel для запуска JSX в браузере -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Подключаем иконки Lucide -->
+    <script src="https://unpkg.com/lucide-react@0.263.1/dist/lucide-react.umd.js"></script>
 
-// --- Конфигурация API ---
-const apiKey = ""; // API ключ будет подставлен автоматически
-
-// --- Конфигурация категорий ---
-const CATEGORIES = [
-  { id: 'food', name: 'Еда и продукты', icon: <Coffee size={20} />, color: 'bg-orange-100 text-orange-600' },
-  { id: 'transport', name: 'Транспорт', icon: <Car size={20} />, color: 'bg-blue-100 text-blue-600' },
-  { id: 'housing', name: 'Дом и ЖКХ', icon: <Home size={20} />, color: 'bg-purple-100 text-purple-600' },
-  { id: 'shopping', name: 'Покупки', icon: <ShoppingBag size={20} />, color: 'bg-pink-100 text-pink-600' },
-  { id: 'health', name: 'Здоровье', icon: <Activity size={20} />, color: 'bg-green-100 text-green-600' },
-  { id: 'other', name: 'Прочее', icon: <MoreHorizontal size={20} />, color: 'bg-gray-100 text-gray-600' },
-];
-
-const FINANCIAL_TIPS = [
-  {
-    title: "Правило 50/30/20",
-    text: "Попробуйте делить бюджет: 50% на нужды, 30% на желания, 20% на сбережения/долги.",
-    level: "Базовый"
-  },
-  {
-    title: "Эффект латте",
-    text: "Мелкие ежедневные траты (кофе, снеки) могут складываться в огромные суммы за год.",
-    level: "Психология"
-  },
-  {
-    title: "Финансовая подушка",
-    text: "Стремитесь накопить сумму, равную 3-6 месяцам ваших обязательных расходов.",
-    level: "Важно"
-  }
-];
-
-export default function App() {
-  // --- Состояние ---
-  const [activeTab, setActiveTab] = useState('home'); // home, stats, tips
-  const [transactions, setTransactions] = useState([]);
-  const [amount, setAmount] = useState('');
-  const [note, setNote] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].id);
-  const [currentDate, setCurrentDate] = useState(new Date());
-  
-  // --- Состояние для AI фич ---
-  const [showMagicInput, setShowMagicInput] = useState(false);
-  const [magicText, setMagicText] = useState('');
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiAdvice, setAiAdvice] = useState(null);
-  const [aiError, setAiError] = useState(null);
-  
-  // --- Состояние для Голосового ввода ---
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef(null);
-
-  // Загрузка данных при старте
-  useEffect(() => {
-    const saved = localStorage.getItem('budget_app_transactions');
-    if (saved) {
-      try {
-        // Восстанавливаем даты из строк
-        const parsed = JSON.parse(saved).map(t => ({
-          ...t,
-          date: new Date(t.date)
-        }));
-        setTransactions(parsed);
-      } catch (e) {
-        console.error("Ошибка чтения данных", e);
-      }
-    } else {
-      // Демо-данные для первого запуска
-      setTransactions([
-        { id: 1, amount: 45, category: 'food', note: 'Обед', date: new Date() },
-        { id: 2, amount: 20, category: 'transport', note: 'Маршрутка', date: new Date(new Date().setDate(new Date().getDate() - 1)) },
-      ]);
-    }
-  }, []);
-
-  // Сохранение данных при изменении
-  useEffect(() => {
-    localStorage.setItem('budget_app_transactions', JSON.stringify(transactions));
-  }, [transactions]);
-
-  // --- Gemini API Helpers ---
-  const callGemini = async (prompt, systemInstruction = "") => {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: systemInstruction }] }
-          })
+    <style>
+        /* Убираем полосы прокрутки для чистого вида */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
         }
-      );
-
-      if (!response.ok) throw new Error('API Error');
-
-      const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text;
-    } catch (error) {
-      console.error("Gemini API Error:", error);
-      throw error;
-    }
-  };
-
-  // --- Логика Голосового ввода ---
-  const toggleListening = () => {
-    if (isListening) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      setIsListening(false);
-      return;
-    }
-
-    // Проверка поддержки API
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setAiError("Ваш браузер не поддерживает голосовой ввод.");
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'ru-RU'; // Устанавливаем русский язык
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      setAiError(null);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognition.onerror = (event) => {
-      console.error("Speech recognition error", event.error);
-      setIsListening(false);
-      setAiError("Ошибка распознавания речи. Попробуйте еще раз.");
-    };
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setMagicText(prev => prev ? `${prev} ${transcript}` : transcript);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-  };
-
-
-  // --- Логика Magic Add (Умное добавление) ---
-  const handleMagicAdd = async (e) => {
-    e.preventDefault();
-    if (!magicText.trim()) return;
-
-    setIsAiLoading(true);
-    setAiError(null);
-
-    const categoryIds = CATEGORIES.map(c => c.id).join(', ');
-    const systemPrompt = `You are a financial parsing assistant. 
-    Extract ALL transaction details from the user's text. The user might list multiple expenses in one sentence.
-    Available categories (use exact ID): ${categoryIds}. Default to 'other' if unclear.
-    
-    Return ONLY a raw JSON ARRAY of objects (no markdown formatting). Each object should have:
-    - amount (number)
-    - category (string, one of the available IDs)
-    - note (string, brief description in Russian)
-    
-    Example input: "10 taxi 40 dinner"
-    Example output: [{"amount": 10, "category": "transport", "note": "taxi"}, {"amount": 40, "category": "food", "note": "dinner"}]
-
-    If no valid amounts are found, return an empty array [].`;
-
-    const userPrompt = `Parse these expenses: "${magicText}"`;
-
-    try {
-      const resultText = await callGemini(userPrompt, systemPrompt);
-      // Clean up markdown if present
-      const jsonStr = resultText.replace(/```json|```/g, '').trim();
-      
-      let results;
-      try {
-          results = JSON.parse(jsonStr);
-          // Если AI вернул один объект вместо массива, оборачиваем в массив
-          if (!Array.isArray(results)) {
-              results = [results];
-          }
-      } catch (parseError) {
-          console.error("JSON Parse Error", parseError);
-          setAiError("Ошибка обработки ответа. Попробуйте проще.");
-          return;
-      }
-
-      if (results && results.length > 0) {
-        const newTransactions = results
-            .filter(r => r.amount) // Убираем пустые
-            .map((r, index) => ({
-                id: Date.now() + index, // Добавляем индекс чтобы ID были уникальны
-                amount: parseFloat(r.amount),
-                category: r.category || 'other',
-                note: r.note || 'Расход',
-                date: new Date()
-            }));
-
-        if (newTransactions.length > 0) {
-            setTransactions(prev => [...newTransactions, ...prev]);
-            setMagicText('');
-            setShowMagicInput(false);
-            if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
-        } else {
-             setAiError("Не удалось распознать суммы.");
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
-      } else {
-        setAiError("Не удалось распознать суммы. Попробуйте еще раз.");
-      }
-    } catch (err) {
-      console.error(err);
-      setAiError("Ошибка соединения с AI. Проверьте интернет.");
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
+        /* Анимации */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        /* Безопасная зона для iPhone с "челкой" */
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <div id="root"></div>
 
-  // --- Логика AI Advisor (Советник) ---
-  const handleGetAiAdvice = async () => {
-    setIsAiLoading(true);
-    setAiAdvice(null);
-    
-    // Берем транзакции за текущий месяц
-    const currentMonthTransactions = transactions.filter(t => 
-      t.date.getMonth() === new Date().getMonth() && 
-      t.date.getFullYear() === new Date().getFullYear()
-    );
+    <script type="text/babel">
+        // --- Получаем библиотеки из глобальной области видимости ---
+        const { useState, useEffect, useMemo, useRef } = React;
+        const { 
+            PieChart, Wallet, BookOpen, Plus, Trash2, TrendingDown, TrendingUp, 
+            Coffee, Car, Home, ShoppingBag, Activity, MoreHorizontal, 
+            ChevronLeft, ChevronRight, Lightbulb, Sparkles, Loader2, X, 
+            Mic, MicOff 
+        } = LucideReact;
 
-    if (currentMonthTransactions.length === 0) {
-      setAiAdvice("Добавьте расходы за этот месяц, чтобы я мог дать совет!");
-      setIsAiLoading(false);
-      return;
-    }
+        // --- Конфигурация API ---
+        const apiKey = ""; // API ключ будет подставлен автоматически
 
-    // Упрощаем данные для промпта
-    const simpleData = currentMonthTransactions.map(t => `${t.category}: ${t.amount} TJS (${t.note})`).join('\n');
+        // --- Конфигурация категорий ---
+        const CATEGORIES = [
+            { id: 'food', name: 'Еда и продукты', icon: <Coffee size={20} />, color: 'bg-orange-100 text-orange-600' },
+            { id: 'transport', name: 'Транспорт', icon: <Car size={20} />, color: 'bg-blue-100 text-blue-600' },
+            { id: 'housing', name: 'Дом и ЖКХ', icon: <Home size={20} />, color: 'bg-purple-100 text-purple-600' },
+            { id: 'shopping', name: 'Покупки', icon: <ShoppingBag size={20} />, color: 'bg-pink-100 text-pink-600' },
+            { id: 'health', name: 'Здоровье', icon: <Activity size={20} />, color: 'bg-green-100 text-green-600' },
+            { id: 'other', name: 'Прочее', icon: <MoreHorizontal size={20} />, color: 'bg-gray-100 text-gray-600' },
+        ];
 
-    const prompt = `
-      Проанализируй эти расходы за месяц (валюта - Сомони) и дай 3 коротких, конкретных, персонализированных совета на русском языке, как сэкономить или улучшить бюджет. 
-      Будь дружелюбным, но кратким. Используй эмодзи.
-      Данные:
-      ${simpleData}
-    `;
+        const FINANCIAL_TIPS = [
+            {
+                title: "Правило 50/30/20",
+                text: "Попробуйте делить бюджет: 50% на нужды, 30% на желания, 20% на сбережения/долги.",
+                level: "Базовый"
+            },
+            {
+                title: "Эффект латте",
+                text: "Мелкие ежедневные траты (кофе, снеки) могут складываться в огромные суммы за год.",
+                level: "Психология"
+            },
+            {
+                title: "Финансовая подушка",
+                text: "Стремитесь накопить сумму, равную 3-6 месяцам ваших обязательных расходов.",
+                level: "Важно"
+            }
+        ];
 
-    try {
-      const advice = await callGemini(prompt);
-      setAiAdvice(advice);
-    } catch (err) {
-      setAiAdvice("Не удалось получить совет от AI. Попробуйте позже.");
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
+        function App() {
+            // --- Состояние ---
+            const [activeTab, setActiveTab] = useState('home');
+            const [transactions, setTransactions] = useState([]);
+            const [amount, setAmount] = useState('');
+            const [note, setNote] = useState('');
+            const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].id);
+            const [currentDate, setCurrentDate] = useState(new Date());
+            
+            // --- Состояние для AI фич ---
+            const [showMagicInput, setShowMagicInput] = useState(false);
+            const [magicText, setMagicText] = useState('');
+            const [isAiLoading, setIsAiLoading] = useState(false);
+            const [aiAdvice, setAiAdvice] = useState(null);
+            const [aiError, setAiError] = useState(null);
+            
+            // --- Состояние для Голосового ввода ---
+            const [isListening, setIsListening] = useState(false);
+            const recognitionRef = useRef(null);
 
+            // Загрузка данных при старте
+            useEffect(() => {
+                const saved = localStorage.getItem('budget_app_transactions');
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved).map(t => ({
+                            ...t,
+                            date: new Date(t.date)
+                        }));
+                        setTransactions(parsed);
+                    } catch (e) {
+                        console.error("Ошибка чтения данных", e);
+                    }
+                } else {
+                    setTransactions([
+                        { id: 1, amount: 45, category: 'food', note: 'Обед', date: new Date() },
+                        { id: 2, amount: 20, category: 'transport', note: 'Маршрутка', date: new Date(new Date().setDate(new Date().getDate() - 1)) },
+                    ]);
+                }
+            }, []);
 
-  // --- Логика добавления (обычная) ---
-  const handleAddTransaction = (e) => {
-    e.preventDefault();
-    if (!amount) return;
+            // Сохранение данных
+            useEffect(() => {
+                localStorage.setItem('budget_app_transactions', JSON.stringify(transactions));
+            }, [transactions]);
 
-    const newTransaction = {
-      id: Date.now(),
-      amount: parseFloat(amount),
-      category: selectedCategory,
-      note: note,
-      date: new Date()
-    };
+            // --- Gemini API Helpers ---
+            const callGemini = async (prompt, systemInstruction = "") => {
+                try {
+                    const response = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: prompt }] }],
+                                systemInstruction: { parts: [{ text: systemInstruction }] }
+                            })
+                        }
+                    );
 
-    setTransactions([newTransaction, ...transactions]);
-    setAmount('');
-    setNote('');
-    // Вибрация для тактильного отклика (на мобильных)
-    if (navigator.vibrate) navigator.vibrate(50);
-  };
+                    if (!response.ok) throw new Error('API Error');
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text;
+                } catch (error) {
+                    console.error("Gemini API Error:", error);
+                    throw error;
+                }
+            };
 
-  const handleDelete = (id) => {
-    setTransactions(transactions.filter(t => t.id !== id));
-  };
+            // --- Логика Голосового ввода ---
+            const toggleListening = () => {
+                if (isListening) {
+                    if (recognitionRef.current) recognitionRef.current.stop();
+                    setIsListening(false);
+                    return;
+                }
 
-  // --- Логика отчетов ---
-  const stats = useMemo(() => {
-    // Фильтр по текущему месяцу отображения
-    const filtered = transactions.filter(t => 
-      t.date.getMonth() === currentDate.getMonth() && 
-      t.date.getFullYear() === currentDate.getFullYear()
-    );
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) {
+                    setAiError("Ваш браузер не поддерживает голосовой ввод.");
+                    return;
+                }
 
-    const total = filtered.reduce((acc, t) => acc + t.amount, 0);
-    
-    const byCategory = CATEGORIES.map(cat => {
-      const sum = filtered
-        .filter(t => t.category === cat.id)
-        .reduce((acc, t) => acc + t.amount, 0);
-      return { ...cat, sum, percentage: total ? (sum / total) * 100 : 0 };
-    }).sort((a, b) => b.sum - a.sum); // Сортировка по убыванию трат
+                const recognition = new SpeechRecognition();
+                recognition.lang = 'ru-RU';
+                recognition.continuous = false;
+                recognition.interimResults = false;
 
-    return { total, byCategory };
-  }, [transactions, currentDate]);
+                recognition.onstart = () => {
+                    setIsListening(true);
+                    setAiError(null);
+                };
+                recognition.onend = () => setIsListening(false);
+                recognition.onerror = (event) => {
+                    console.error("Speech recognition error", event.error);
+                    setIsListening(false);
+                    setAiError("Ошибка распознавания речи. Попробуйте еще раз.");
+                };
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    setMagicText(prev => prev ? `${prev} ${transcript}` : transcript);
+                };
 
-  // --- Логика рекомендаций (статическая) ---
-  const recommendations = useMemo(() => {
-    const recs = [];
-    if (stats.byCategory.length > 0) {
-      const topSpender = stats.byCategory[0];
-      if (topSpender.id === 'food' && topSpender.percentage > 40) {
-        recs.push("Вы тратите более 40% на еду. Попробуйте готовить дома чаще и брать обеды с собой.");
-      }
-      if (topSpender.id === 'transport' && topSpender.percentage > 20) {
-        recs.push("Расходы на транспорт высоки. Рассмотрите проездные билеты или такси 'подели поездку'.");
-      }
-      if (topSpender.id === 'shopping' && topSpender.percentage > 30) {
-        recs.push("Кажется, был месяц шопинга. Попробуйте правило «подождать 24 часа» перед покупкой.");
-      }
-    }
-    if (stats.total === 0) {
-      recs.push("Начните вносить расходы, чтобы получить персональные советы.");
-    }
-    return recs;
-  }, [stats]);
+                recognitionRef.current = recognition;
+                recognition.start();
+            };
 
-  // --- Форматирование ---
-  const formatMoney = (val) => new Intl.NumberFormat('ru-TJ', { style: 'currency', currency: 'TJS', maximumFractionDigits: 0 }).format(val);
-  const formatDate = (date) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
-  const currentMonthName = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(currentDate);
+            // --- Логика Magic Add ---
+            const handleMagicAdd = async (e) => {
+                e.preventDefault();
+                if (!magicText.trim()) return;
 
-  const changeMonth = (delta) => {
-    const newDate = new Date(currentDate);
-    newDate.setMonth(newDate.getMonth() + delta);
-    setCurrentDate(newDate);
-  };
+                setIsAiLoading(true);
+                setAiError(null);
 
-  // --- Компоненты экрана ---
+                const categoryIds = CATEGORIES.map(c => c.id).join(', ');
+                const systemPrompt = `You are a financial parsing assistant. 
+                Extract ALL transaction details from the user's text. The user might list multiple expenses in one sentence.
+                Available categories (use exact ID): ${categoryIds}. Default to 'other' if unclear.
+                Return ONLY a raw JSON ARRAY of objects (no markdown formatting). Each object:
+                - amount (number)
+                - category (string from IDs)
+                - note (string, brief description in Russian)
+                Example input: "10 taxi 40 dinner" -> [{"amount": 10, "category": "transport", "note": "taxi"}, {"amount": 40, "category": "food", "note": "dinner"}]
+                If no valid amounts, return empty array [].`;
 
-  const HomeScreen = () => (
-    <div className="space-y-6 pb-24 animate-fade-in relative">
-      {/* Баланс / Расход за месяц (текущий реальный месяц) */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-200">
-        <p className="text-blue-100 text-sm font-medium">Расходы за этот месяц</p>
-        <h1 className="text-4xl font-bold mt-1">
-          {formatMoney(transactions.filter(t => t.date.getMonth() === new Date().getMonth()).reduce((acc, t) => acc + t.amount, 0))}
-        </h1>
-        <div className="mt-4 flex gap-2">
-           <span className="bg-white/20 px-3 py-1 rounded-full text-xs flex items-center gap-1">
-             <TrendingUp size={14} /> Активность
-           </span>
-        </div>
-      </div>
+                const userPrompt = `Parse these expenses: "${magicText}"`;
 
-      {/* Кнопка переключения на AI Magic Add */}
-      {!showMagicInput && (
-        <button 
-          onClick={() => setShowMagicInput(true)}
-          className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white p-3 rounded-2xl shadow-md flex items-center justify-center gap-2 text-sm font-bold transition-transform active:scale-95"
-        >
-          <Sparkles size={18} />
-          Умное добавление (Голос / Текст)
-        </button>
-      )}
+                try {
+                    const resultText = await callGemini(userPrompt, systemPrompt);
+                    const jsonStr = resultText.replace(/```json|```/g, '').trim();
+                    let results;
+                    try {
+                        results = JSON.parse(jsonStr);
+                        if (!Array.isArray(results)) results = [results];
+                    } catch (parseError) {
+                        setAiError("Ошибка обработки ответа.");
+                        return;
+                    }
 
-      {/* Форма добавления (AI Magic) */}
-      {showMagicInput && (
-        <div className="bg-white p-5 rounded-2xl shadow-md border border-violet-100 relative overflow-hidden">
-           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500"></div>
-           <button onClick={() => setShowMagicInput(false)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
-             <X size={18} />
-           </button>
-           <h2 className="text-sm font-bold text-violet-700 mb-3 flex items-center gap-2">
-             <Sparkles size={16} /> Напишите или скажите
-           </h2>
-           <form onSubmit={handleMagicAdd} className="space-y-3">
-             <div className="relative">
-                <textarea 
-                  value={magicText}
-                  onChange={(e) => setMagicText(e.target.value)}
-                  placeholder="Например: 10 такси, 40 ужин"
-                  className="w-full bg-gray-50 rounded-xl p-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-violet-200 resize-none h-20"
-                  autoFocus
-                />
-                <button 
-                  type="button"
-                  onClick={toggleListening}
-                  className={`absolute bottom-3 right-3 p-2 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
-                >
-                  {isListening ? <MicOff size={18} /> : <Mic size={18} />}
-                </button>
-             </div>
-             
-             {aiError && <p className="text-xs text-red-500">{aiError}</p>}
-             <button 
-                type="submit" 
-                disabled={isAiLoading}
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white p-3 rounded-xl shadow transition-colors flex items-center justify-center gap-2"
-             >
-                {isAiLoading ? <Loader2 className="animate-spin" size={20} /> : 'Распознать и добавить'}
-             </button>
-           </form>
-        </div>
-      )}
+                    if (results && results.length > 0) {
+                        const newTransactions = results
+                            .filter(r => r.amount)
+                            .map((r, index) => ({
+                                id: Date.now() + index,
+                                amount: parseFloat(r.amount),
+                                category: r.category || 'other',
+                                note: r.note || 'Расход',
+                                date: new Date()
+                            }));
 
-      {/* Форма добавления (Обычная) */}
-      {!showMagicInput && (
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Ручной ввод</h2>
-        <form onSubmit={handleAddTransaction} className="space-y-4">
-          <div>
-            <label className="text-xs text-gray-500 ml-1">Сумма (сомони)</label>
-            <input 
-              type="number" 
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0 с."
-              className="w-full text-2xl font-bold border-b-2 border-gray-200 focus:border-blue-500 outline-none py-2 px-1 bg-transparent transition-colors"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="text-xs text-gray-500 ml-1 mb-2 block">Категория</label>
-            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              {CATEGORIES.map(cat => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`flex flex-col items-center gap-1 min-w-[70px] p-2 rounded-xl transition-all ${
-                    selectedCategory === cat.id 
-                      ? 'bg-blue-50 ring-2 ring-blue-500 scale-105' 
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  <div className={`p-2 rounded-full ${cat.color}`}>
-                    {cat.icon}
-                  </div>
-                  <span className="text-xs text-gray-600 truncate w-full text-center">{cat.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+                        if (newTransactions.length > 0) {
+                            setTransactions(prev => [...newTransactions, ...prev]);
+                            setMagicText('');
+                            setShowMagicInput(false);
+                            if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
+                        } else {
+                            setAiError("Не удалось распознать суммы.");
+                        }
+                    } else {
+                        setAiError("Не удалось распознать суммы.");
+                    }
+                } catch (err) {
+                    setAiError("Ошибка соединения с AI.");
+                } finally {
+                    setIsAiLoading(false);
+                }
+            };
 
-          <div className="flex gap-3">
-             <input 
-              type="text" 
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Комментарий (необязательно)"
-              className="flex-1 bg-gray-50 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100"
-            />
-            <button 
-              type="submit" 
-              className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl shadow-md transition-transform active:scale-95"
-            >
-              <Plus size={24} />
-            </button>
-          </div>
-        </form>
-      </div>
-      )}
+            // --- Логика AI Advisor ---
+            const handleGetAiAdvice = async () => {
+                setIsAiLoading(true);
+                setAiAdvice(null);
+                
+                const currentMonthTransactions = transactions.filter(t => 
+                    t.date.getMonth() === new Date().getMonth() && 
+                    t.date.getFullYear() === new Date().getFullYear()
+                );
 
-      {/* Список последних */}
-      <div>
-        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">Последние операции</h3>
-        <div className="space-y-3">
-          {transactions.slice(0, 5).map(t => {
-            const cat = CATEGORIES.find(c => c.id === t.category);
-            return (
-              <div key={t.id} className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm border border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-full ${cat?.color || 'bg-gray-100'}`}>
-                    {cat?.icon}
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-800">{cat?.name}</p>
-                    <p className="text-xs text-gray-400">{t.note || formatDate(t.date)}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-bold text-gray-800">-{t.amount} с.</span>
-                  <button onClick={() => handleDelete(t.id)} className="text-gray-300 hover:text-red-500">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-          {transactions.length === 0 && (
-            <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-              Список пуст. Добавьте первую трату!
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+                if (currentMonthTransactions.length === 0) {
+                    setAiAdvice("Добавьте расходы за этот месяц, чтобы я мог дать совет!");
+                    setIsAiLoading(false);
+                    return;
+                }
 
-  const StatsScreen = () => (
-    <div className="space-y-6 pb-24 animate-fade-in">
-      {/* Выбор месяца */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm">
-        <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-gray-100 rounded-full text-gray-600"><ChevronLeft size={20}/></button>
-        <span className="font-bold text-lg capitalize text-gray-800">{currentMonthName}</span>
-        <button onClick={() => changeMonth(1)} className="p-2 hover:bg-gray-100 rounded-full text-gray-600"><ChevronRight size={20}/></button>
-      </div>
+                const simpleData = currentMonthTransactions.map(t => `${t.category}: ${t.amount} TJS (${t.note})`).join('\n');
+                const prompt = `Проанализируй расходы за месяц (валюта Сомони) и дай 3 совета на русском. Данные:\n${simpleData}`;
 
-      {/* График (визуализация барами) */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div className="flex items-center justify-between mb-6">
-            <h2 className="font-bold text-gray-800">Структура расходов</h2>
-            <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                Итого: {formatMoney(stats.total)}
-            </span>
-        </div>
-        
-        <div className="space-y-5">
-          {stats.byCategory.filter(c => c.sum > 0).map(cat => (
-            <div key={cat.id}>
-              <div className="flex justify-between text-sm mb-1">
-                <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${cat.color.split(' ')[0].replace('bg-', 'bg-')}`}></span>
-                    <span className="text-gray-700 font-medium">{cat.name}</span>
-                </div>
-                <span className="text-gray-900 font-bold">{Math.round(cat.percentage)}% <span className="text-gray-400 font-normal">({formatMoney(cat.sum)})</span></span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                <div 
-                  className={`h-2.5 rounded-full transition-all duration-1000 ${cat.color.split(' ')[0].replace('bg-', 'bg-')}`} 
-                  style={{ width: `${cat.percentage}%` }}
-                ></div>
-              </div>
-            </div>
-          ))}
-          {stats.total === 0 && (
-             <div className="text-center text-gray-400 py-10">
-                 Нет данных за этот месяц
-             </div>
-          )}
-        </div>
-      </div>
+                try {
+                    const advice = await callGemini(prompt);
+                    setAiAdvice(advice);
+                } catch (err) {
+                    setAiAdvice("Не удалось получить совет от AI.");
+                } finally {
+                    setIsAiLoading(false);
+                }
+            };
 
-      {/* Персональная рекомендация для текущего месяца */}
-      {recommendations.length > 0 && (
-        <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl">
-            <div className="flex items-start gap-3">
-                <div className="bg-indigo-100 p-2 rounded-full text-indigo-600 mt-1">
-                    <Lightbulb size={20} />
-                </div>
-                <div>
-                    <h3 className="font-bold text-indigo-900 mb-1">Анализ месяца</h3>
-                    <p className="text-indigo-800 text-sm leading-relaxed">
-                        {recommendations[0]}
-                    </p>
-                </div>
-            </div>
-        </div>
-      )}
-    </div>
-  );
+            // --- Обычное добавление ---
+            const handleAddTransaction = (e) => {
+                e.preventDefault();
+                if (!amount) return;
+                const newTransaction = {
+                    id: Date.now(),
+                    amount: parseFloat(amount),
+                    category: selectedCategory,
+                    note: note,
+                    date: new Date()
+                };
+                setTransactions([newTransaction, ...transactions]);
+                setAmount('');
+                setNote('');
+                if (navigator.vibrate) navigator.vibrate(50);
+            };
 
-  const TipsScreen = () => (
-    <div className="space-y-6 pb-24 animate-fade-in">
-        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-lg">
-            <h1 className="text-2xl font-bold mb-2">Фин. грамотность</h1>
-            <p className="text-emerald-50">Узнайте, как управлять деньгами эффективнее.</p>
-        </div>
+            const handleDelete = (id) => {
+                setTransactions(transactions.filter(t => t.id !== id));
+            };
 
-        {/* AI Советник Блок */}
-        <div className="bg-gradient-to-r from-violet-50 to-fuchsia-50 p-5 rounded-2xl border border-violet-100">
-           <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="text-violet-600" size={20} />
-              <h3 className="font-bold text-violet-800">Персональный AI-анализ</h3>
-           </div>
-           
-           {!aiAdvice ? (
-             <div>
-               <p className="text-sm text-gray-600 mb-4">
-                 Gemini проанализирует ваши расходы за этот месяц и даст конкретные советы.
-               </p>
-               <button 
-                 onClick={handleGetAiAdvice}
-                 disabled={isAiLoading}
-                 className="w-full bg-white text-violet-600 border border-violet-200 py-2 px-4 rounded-xl font-medium shadow-sm hover:bg-violet-50 transition-colors flex items-center justify-center gap-2"
-               >
-                 {isAiLoading ? <Loader2 className="animate-spin" size={18} /> : 'Получить совет ✨'}
-               </button>
-             </div>
-           ) : (
-             <div className="animate-fade-in">
-               <div className="bg-white p-4 rounded-xl shadow-sm border border-violet-100 text-sm text-gray-700 whitespace-pre-line leading-relaxed">
-                 {aiAdvice}
-               </div>
-               <button 
-                 onClick={() => setAiAdvice(null)}
-                 className="mt-3 text-xs text-violet-500 font-medium hover:underline"
-               >
-                 Скрыть совет
-               </button>
-             </div>
-           )}
-        </div>
+            // --- Статистика и рекомендации ---
+            const stats = useMemo(() => {
+                const filtered = transactions.filter(t => 
+                    t.date.getMonth() === currentDate.getMonth() && 
+                    t.date.getFullYear() === currentDate.getFullYear()
+                );
+                const total = filtered.reduce((acc, t) => acc + t.amount, 0);
+                const byCategory = CATEGORIES.map(cat => {
+                    const sum = filtered.filter(t => t.category === cat.id).reduce((acc, t) => acc + t.amount, 0);
+                    return { ...cat, sum, percentage: total ? (sum / total) * 100 : 0 };
+                }).sort((a, b) => b.sum - a.sum);
+                return { total, byCategory };
+            }, [transactions, currentDate]);
 
-        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider ml-1 mt-6">Общие советы</h3>
-        
-        <div className="grid gap-4">
-            {FINANCIAL_TIPS.map((tip, idx) => (
-                <div key={idx} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="flex justify-between items-start mb-3">
-                        <h3 className="font-bold text-gray-800 text-lg">{tip.title}</h3>
-                        <span className="text-xs font-semibold bg-gray-100 text-gray-500 px-2 py-1 rounded-md">{tip.level}</span>
+            const recommendations = useMemo(() => {
+                const recs = [];
+                if (stats.byCategory.length > 0) {
+                    const topSpender = stats.byCategory[0];
+                    if (topSpender.id === 'food' && topSpender.percentage > 40) recs.push("Вы тратите более 40% на еду. Попробуйте готовить дома.");
+                    if (topSpender.id === 'transport' && topSpender.percentage > 20) recs.push("Расходы на транспорт высоки. Рассмотрите альтернативы.");
+                    if (topSpender.id === 'shopping' && topSpender.percentage > 30) recs.push("Месяц шопинга? Попробуйте правило «24 часа» перед покупкой.");
+                }
+                if (stats.total === 0) recs.push("Внесите расходы для получения советов.");
+                return recs;
+            }, [stats]);
+
+            const formatMoney = (val) => new Intl.NumberFormat('ru-TJ', { style: 'currency', currency: 'TJS', maximumFractionDigits: 0 }).format(val);
+            const formatDate = (date) => new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
+            const currentMonthName = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(currentDate);
+
+            const changeMonth = (delta) => {
+                const newDate = new Date(currentDate);
+                newDate.setMonth(newDate.getMonth() + delta);
+                setCurrentDate(newDate);
+            };
+
+            // --- Рендер Экранов ---
+
+            const HomeScreen = () => (
+                <div className="space-y-6 pb-24 animate-fade-in relative">
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-200">
+                        <p className="text-blue-100 text-sm font-medium">Расходы за этот месяц</p>
+                        <h1 className="text-4xl font-bold mt-1">
+                            {formatMoney(transactions.filter(t => t.date.getMonth() === new Date().getMonth()).reduce((acc, t) => acc + t.amount, 0))}
+                        </h1>
+                        <div className="mt-4 flex gap-2">
+                            <span className="bg-white/20 px-3 py-1 rounded-full text-xs flex items-center gap-1">
+                                <TrendingUp size={14} /> Активность
+                            </span>
+                        </div>
                     </div>
-                    <p className="text-gray-600 text-sm leading-relaxed">
-                        {tip.text}
-                    </p>
+
+                    {!showMagicInput && (
+                        <button onClick={() => setShowMagicInput(true)} className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white p-3 rounded-2xl shadow-md flex items-center justify-center gap-2 text-sm font-bold transition-transform active:scale-95">
+                            <Sparkles size={18} /> Умное добавление (Голос / Текст)
+                        </button>
+                    )}
+
+                    {showMagicInput && (
+                        <div className="bg-white p-5 rounded-2xl shadow-md border border-violet-100 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500"></div>
+                            <button onClick={() => setShowMagicInput(false)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"><X size={18} /></button>
+                            <h2 className="text-sm font-bold text-violet-700 mb-3 flex items-center gap-2"><Sparkles size={16} /> Напишите или скажите</h2>
+                            <form onSubmit={handleMagicAdd} className="space-y-3">
+                                <div className="relative">
+                                    <textarea value={magicText} onChange={(e) => setMagicText(e.target.value)} placeholder="Например: 10 такси, 40 ужин" className="w-full bg-gray-50 rounded-xl p-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-violet-200 resize-none h-20" autoFocus />
+                                    <button type="button" onClick={toggleListening} className={`absolute bottom-3 right-3 p-2 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>
+                                        {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+                                    </button>
+                                </div>
+                                {aiError && <p className="text-xs text-red-500">{aiError}</p>}
+                                <button type="submit" disabled={isAiLoading} className="w-full bg-violet-600 hover:bg-violet-700 text-white p-3 rounded-xl shadow transition-colors flex items-center justify-center gap-2">
+                                    {isAiLoading ? <Loader2 className="animate-spin" size={20} /> : 'Распознать и добавить'}
+                                </button>
+                            </form>
+                        </div>
+                    )}
+
+                    {!showMagicInput && (
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                            <h2 className="text-lg font-semibold text-gray-800 mb-4">Ручной ввод</h2>
+                            <form onSubmit={handleAddTransaction} className="space-y-4">
+                                <div>
+                                    <label className="text-xs text-gray-500 ml-1">Сумма (сомони)</label>
+                                    <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0 с." className="w-full text-2xl font-bold border-b-2 border-gray-200 focus:border-blue-500 outline-none py-2 px-1 bg-transparent transition-colors" required />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500 ml-1 mb-2 block">Категория</label>
+                                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                                        {CATEGORIES.map(cat => (
+                                            <button key={cat.id} type="button" onClick={() => setSelectedCategory(cat.id)} className={`flex flex-col items-center gap-1 min-w-[70px] p-2 rounded-xl transition-all ${selectedCategory === cat.id ? 'bg-blue-50 ring-2 ring-blue-500 scale-105' : 'hover:bg-gray-50'}`}>
+                                                <div className={`p-2 rounded-full ${cat.color}`}>{cat.icon}</div>
+                                                <span className="text-xs text-gray-600 truncate w-full text-center">{cat.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Комментарий" className="flex-1 bg-gray-50 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
+                                    <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl shadow-md transition-transform active:scale-95"><Plus size={24} /></button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    <div>
+                        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">Последние операции</h3>
+                        <div className="space-y-3">
+                            {transactions.slice(0, 5).map(t => {
+                                const cat = CATEGORIES.find(c => c.id === t.category);
+                                return (
+                                    <div key={t.id} className="bg-white p-3 rounded-xl flex items-center justify-between shadow-sm border border-gray-100">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`p-2 rounded-full ${cat?.color || 'bg-gray-100'}`}>{cat?.icon}</div>
+                                            <div>
+                                                <p className="font-medium text-gray-800">{cat?.name}</p>
+                                                <p className="text-xs text-gray-400">{t.note || formatDate(t.date)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="font-bold text-gray-800">-{t.amount} с.</span>
+                                            <button onClick={() => handleDelete(t.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {transactions.length === 0 && <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">Список пуст. Добавьте первую трату!</div>}
+                        </div>
+                    </div>
                 </div>
-            ))}
-        </div>
+            );
 
-        <div className="bg-orange-50 p-5 rounded-2xl border border-orange-100">
-             <h3 className="font-bold text-orange-800 mb-2">Как снизить расходы?</h3>
-             <ul className="list-disc list-inside space-y-2 text-sm text-orange-900/80">
-                 <li>Отключите неиспользуемые подписки.</li>
-                 <li>Составляйте список покупок перед походом в магазин.</li>
-                 <li>Пользуйтесь кэшбэком и картами лояльности.</li>
-                 <li>Сравнивайте цены на крупные покупки в разных местах.</li>
-             </ul>
-        </div>
-    </div>
-  );
+            const StatsScreen = () => (
+                <div className="space-y-6 pb-24 animate-fade-in">
+                    <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm">
+                        <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-gray-100 rounded-full text-gray-600"><ChevronLeft size={20}/></button>
+                        <span className="font-bold text-lg capitalize text-gray-800">{currentMonthName}</span>
+                        <button onClick={() => changeMonth(1)} className="p-2 hover:bg-gray-100 rounded-full text-gray-600"><ChevronRight size={20}/></button>
+                    </div>
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="font-bold text-gray-800">Структура</h2>
+                            <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">Итого: {formatMoney(stats.total)}</span>
+                        </div>
+                        <div className="space-y-5">
+                            {stats.byCategory.filter(c => c.sum > 0).map(cat => (
+                                <div key={cat.id}>
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`w-2 h-2 rounded-full ${cat.color.split(' ')[0].replace('bg-', 'bg-')}`}></span>
+                                            <span className="text-gray-700 font-medium">{cat.name}</span>
+                                        </div>
+                                        <span className="text-gray-900 font-bold">{Math.round(cat.percentage)}% <span className="text-gray-400 font-normal">({formatMoney(cat.sum)})</span></span>
+                                    </div>
+                                    <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                                        <div className={`h-2.5 rounded-full transition-all duration-1000 ${cat.color.split(' ')[0].replace('bg-', 'bg-')}`} style={{ width: `${cat.percentage}%` }}></div>
+                                    </div>
+                                </div>
+                            ))}
+                            {stats.total === 0 && <div className="text-center text-gray-400 py-10">Нет данных за этот месяц</div>}
+                        </div>
+                    </div>
+                    {recommendations.length > 0 && (
+                        <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl">
+                            <div className="flex items-start gap-3">
+                                <div className="bg-indigo-100 p-2 rounded-full text-indigo-600 mt-1"><Lightbulb size={20} /></div>
+                                <div>
+                                    <h3 className="font-bold text-indigo-900 mb-1">Анализ месяца</h3>
+                                    <p className="text-indigo-800 text-sm leading-relaxed">{recommendations[0]}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
 
-  // --- Навигация ---
-  return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-      <div className="max-w-md mx-auto min-h-screen relative shadow-2xl bg-gray-50 flex flex-col">
-        
-        {/* Верхняя шапка (только для мобильного вида) */}
-        <header className="bg-white px-6 py-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-100">
-            <h1 className="text-xl font-extrabold text-blue-600 tracking-tight flex items-center gap-2">
-                <Wallet className="fill-blue-600 text-white" size={24} />
-                Мой Бюджет
-            </h1>
-            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border-2 border-white shadow-sm">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
-            </div>
-        </header>
+            const TipsScreen = () => (
+                <div className="space-y-6 pb-24 animate-fade-in">
+                    <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-lg">
+                        <h1 className="text-2xl font-bold mb-2">Фин. грамотность</h1>
+                        <p className="text-emerald-50">Узнайте, как управлять деньгами эффективнее.</p>
+                    </div>
+                    <div className="bg-gradient-to-r from-violet-50 to-fuchsia-50 p-5 rounded-2xl border border-violet-100">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Sparkles className="text-violet-600" size={20} />
+                            <h3 className="font-bold text-violet-800">AI-анализ</h3>
+                        </div>
+                        {!aiAdvice ? (
+                            <div>
+                                <p className="text-sm text-gray-600 mb-4">Gemini проанализирует расходы и даст советы.</p>
+                                <button onClick={handleGetAiAdvice} disabled={isAiLoading} className="w-full bg-white text-violet-600 border border-violet-200 py-2 px-4 rounded-xl font-medium shadow-sm hover:bg-violet-50 transition-colors flex items-center justify-center gap-2">
+                                    {isAiLoading ? <Loader2 className="animate-spin" size={18} /> : 'Получить совет ✨'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="animate-fade-in">
+                                <div className="bg-white p-4 rounded-xl shadow-sm border border-violet-100 text-sm text-gray-700 whitespace-pre-line leading-relaxed">{aiAdvice}</div>
+                                <button onClick={() => setAiAdvice(null)} className="mt-3 text-xs text-violet-500 font-medium hover:underline">Скрыть совет</button>
+                            </div>
+                        )}
+                    </div>
+                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider ml-1 mt-6">Общие советы</h3>
+                    <div className="grid gap-4">
+                        {FINANCIAL_TIPS.map((tip, idx) => (
+                            <div key={idx} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                                <div className="flex justify-between items-start mb-3">
+                                    <h3 className="font-bold text-gray-800 text-lg">{tip.title}</h3>
+                                    <span className="text-xs font-semibold bg-gray-100 text-gray-500 px-2 py-1 rounded-md">{tip.level}</span>
+                                </div>
+                                <p className="text-gray-600 text-sm leading-relaxed">{tip.text}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
 
-        {/* Контент */}
-        <main className="flex-1 p-4 overflow-y-auto">
-          {activeTab === 'home' && <HomeScreen />}
-          {activeTab === 'stats' && <StatsScreen />}
-          {activeTab === 'tips' && <TipsScreen />}
-        </main>
+            // --- Основной Layout ---
+            return (
+                <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
+                    <div className="max-w-md mx-auto min-h-screen relative shadow-2xl bg-gray-50 flex flex-col">
+                        <header className="bg-white px-6 py-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-100">
+                            <h1 className="text-xl font-extrabold text-blue-600 tracking-tight flex items-center gap-2">
+                                <Wallet className="fill-blue-600 text-white" size={24} />
+                                Мой Бюджет
+                            </h1>
+                            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border-2 border-white shadow-sm">
+                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
+                            </div>
+                        </header>
 
-        {/* Нижнее меню */}
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 max-w-md mx-auto">
-          <div className="flex justify-around items-center h-16">
-            <button 
-              onClick={() => setActiveTab('home')}
-              className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${activeTab === 'home' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              <Wallet size={24} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
-              <span className="text-[10px] font-medium">Главная</span>
-            </button>
-            
-            <button 
-              onClick={() => setActiveTab('stats')}
-              className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${activeTab === 'stats' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              <PieChart size={24} strokeWidth={activeTab === 'stats' ? 2.5 : 2} />
-              <span className="text-[10px] font-medium">Отчеты</span>
-            </button>
-            
-            <button 
-              onClick={() => setActiveTab('tips')}
-              className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${activeTab === 'tips' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              <BookOpen size={24} strokeWidth={activeTab === 'tips' ? 2.5 : 2} />
-              <span className="text-[10px] font-medium">Советы</span>
-            </button>
-          </div>
-        </nav>
-      </div>
-    </div>
-  );
-}
+                        <main className="flex-1 p-4 overflow-y-auto">
+                            {activeTab === 'home' && <HomeScreen />}
+                            {activeTab === 'stats' && <StatsScreen />}
+                            {activeTab === 'tips' && <TipsScreen />}
+                        </main>
+
+                        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe z-20 max-w-md mx-auto">
+                            <div className="flex justify-around items-center h-16">
+                                <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${activeTab === 'home' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                                    <Wallet size={24} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
+                                    <span className="text-[10px] font-medium">Главная</span>
+                                </button>
+                                <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${activeTab === 'stats' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                                    <PieChart size={24} strokeWidth={activeTab === 'stats' ? 2.5 : 2} />
+                                    <span className="text-[10px] font-medium">Отчеты</span>
+                                </button>
+                                <button onClick={() => setActiveTab('tips')} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${activeTab === 'tips' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>
+                                    <BookOpen size={24} strokeWidth={activeTab === 'tips' ? 2.5 : 2} />
+                                    <span className="text-[10px] font-medium">Советы</span>
+                                </button>
+                            </div>
+                        </nav>
+                    </div>
+                </div>
+            );
+        }
+
+        // Рендер приложения
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
